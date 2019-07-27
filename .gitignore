@@ -1,0 +1,13 @@
+# JetBrains
+.idea/*
+
+# CMake
+build/*
+cmake-build-debug/*
+cmake-build-release/*
+
+# VSCode
+.code/*
+
+# MacOS
+.DS_Store

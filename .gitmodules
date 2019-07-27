@@ -1,0 +1,12 @@
+[submodule "src/ext/tinyobjloader"]
+	path = src/ext/tinyobjloader
+	url = https://github.com/syoyo/tinyobjloader.git
+[submodule "src/ext/stb"]
+	path = src/ext/stb
+	url = https://github.com/nothings/stb.git
+[submodule "src/ext/imgui"]
+	path = src/ext/imgui
+	url = https://github.com/ocornut/imgui.git
+[submodule "src/ext/tinyply"]
+	path = src/ext/tinyply
+	url = https://github.com/ddiakopoulos/tinyply.git
