@@ -37,17 +37,16 @@ file(GLOB EXTERNAL_FILES
      "ext/**/examples/imgui_impl_glfw.cpp" "ext/**/examples/imgui_glfw.h"
      "ext/**/tiny_obj_loader.cc" "ext/**/source/tinyply.cpp")
 
-message(STATUS ${EXTERNAL_FILES})
-
 file(GLOB SHADER_FILES
-    "${CMAKE_CURRENT_LIST_DIR}/shaders/*.vert"
     "${CMAKE_CURRENT_LIST_DIR}/shaders/*.vert"
     "${CMAKE_CURRENT_LIST_DIR}/shaders/*.frag")
 
 include_directories(${GLRT_INCLUDE_DIR} ${GLM_INCLUDE_DIRS} ${GLFW3_INCLUDE_DIRS})
 add_executable(${BUILD_TARGET} ${SOURCE_FILES} ${EXTERNAL_FILES} ${SHADER_FILES})
 
-target_link_libraries(${BUILD_TARGET} ${OPENGL_LIBRARIES} ${GLFW3_LIBRARIES})
+source_group("Shader Files" FILES ${SHADER_FILES})
+
+target_link_libraries(${BUILD_TARGET} ${OPENGL_LIBRARIES} ${GLFW3_LIBRARIES} ${CXX_FS_LIBRARY})
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Move ImGui font files
@@ -55,6 +54,32 @@ target_link_libraries(${BUILD_TARGET} ${OPENGL_LIBRARIES} ${GLFW3_LIBRARIES})
 file(MAKE_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/bin)
 configure_file(${CMAKE_CURRENT_LIST_DIR}/ext/imgui/misc/fonts/Roboto-Medium.ttf
                ${CMAKE_RUNTIME_OUTPUT_DIRECTORY} COPYONLY)
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Copy shader programs
+# ----------------------------------------------------------------------------------------------------------------------
+
+set(OUTPUT_SHADERS "")
+set(SHADER_OUTPUT_DIR "${CMAKE_BINARY_DIR}/shaders")
+
+foreach (SHADER IN LISTS SHADER_FILES)
+    get_filename_component(BASE_NAME ${SHADER} NAME)
+    set(OUTPUT_SHADERS ${OUTPUT_SHADERS} ${SHADER_OUTPUT_DIR}/${BASE_NAME})
+endforeach()
+
+add_custom_command(OUTPUT ${OUTPUT_SHADERS}
+                   COMMAND ${CMAKE_COMMAND}
+                   ARGS -E remove_directory "${SHADER_OUTPUT_DIR}"
+                   COMMAND ${CMAKE_COMMAND}
+                   ARGS -E make_directory  "${SHADER_OUTPUT_DIR}"
+                   COMMAND ${CMAKE_COMMAND}
+                   ARGS -E copy ${SHADER_FILES} "${CMAKE_BINARY_DIR}/shaders"
+                   DEPENDS ${SHADER_FILES})
+
+add_custom_target(COPY_SHADER_FILES ALL
+                  SOURCES ${OUTPUT_SHADERS})
+
+add_dependencies(${BUILD_TARGET} COPY_SHADER_FILES)
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Debug settings for MSVC

@@ -17,8 +17,6 @@ find_package_handle_standard_args(
 )
 
 if (GLFW3_FOUND)
-    message(STATUS "*** GLM ***")
-    message(STATUS "Include: ${GLM_INCLUDE_DIR}")
-    message(STATUS "*************")
+    message(STATUS "GLM include: ${GLM_INCLUDE_DIR}")
     set(GLM_INCLUDE_DIRS "${GLM_INCLUDE_DIR}")
 endif()

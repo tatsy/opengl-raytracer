@@ -7,6 +7,8 @@
 
 #include "common.h"
 #include "timer.h"
+#include "vertex_array_object.h"
+#include "shader_program.h"
 
 static void error_callback(int err, const char *desc) {
     printf("GLFW error: %s (%d)\n", desc, err);
@@ -99,8 +101,8 @@ void Window::mainloop(double fps) {
     glViewport(0, 0, renderBufferWidth, renderBufferHeight);
 
     // Mainloop
-    Timer timer;
     timer.start();
+    double duration;
     while (glfwWindowShouldClose(window_) == GLFW_FALSE) {
         // Handle events
         glfwPollEvents();
@@ -117,7 +119,7 @@ void Window::mainloop(double fps) {
             ImGui::Text("Renderer: %s", glGetString(GL_RENDERER));
             ImGui::Text("OpenGL: %s", glGetString(GL_VERSION));
             ImGui::Text("GLSL: %s", glGetString(GL_SHADING_LANGUAGE_VERSION));
-            ImGui::Text("FPS: %7.3f", 1.0 / timer.count());
+            ImGui::Text("FPS: %7.3f", 1.0 / duration);
             ImGui::Text("Size: %d x %d", width(), height());
             ImGui::End();
 
@@ -145,6 +147,7 @@ void Window::mainloop(double fps) {
             glfwSwapBuffers(window_);
 
             // Reset timer
+            duration = timer.count();
             timer.reset();
         }
     }
@@ -165,10 +168,38 @@ void Window::mainloop(double fps) {
 void Window::initialize() {
     glEnable(GL_DEPTH_TEST);
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+
+    vao = std::make_shared<VertexArrayObject>();
+
+    program = std::make_shared<ShaderProgram>();
+    program->create();
+    program->attachShader(ShaderStage::fromFile("screen.vert", ShaderType::Vertex));
+    program->attachShader(ShaderStage::fromFile("screen.frag", ShaderType::Fragment));
+    program->link();
 }
 
 void Window::render() {
+    glm::vec3 org = glm::vec3(50.0f, 52.0f, 295.6f);
+    glm::vec3 dir = glm::vec3(0.0f, -0.042612f, -1.0f);
+    glm::mat4 camMat = glm::lookAt(org + 140.0f * dir,
+                                   org + 141.0f * dir,
+                                   glm::vec3(0.0f, 1.0f, 0.0f));
+    glm::mat4 projMat = glm::perspective(glm::radians(70.0f), (float)width() / (float)height(), 1.0f, 100.0f);
+
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    program->start();
+    vao->bind();
+
+    program->setMatrix4x4("u_mvMat", camMat);
+    program->setMatrix4x4("u_projMat", projMat);
+    program->setUniform1f("u_time", (float)timer.count());
+    program->setUniform2f("u_windowSize", glm::vec2((float)width(), (float)height()));
+
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+
+    vao->unbind();
+    program->end();
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

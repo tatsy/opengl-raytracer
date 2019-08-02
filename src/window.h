@@ -1,10 +1,12 @@
 #pragma once
 
 #include <string>
+#include <memory>
 
 #include "api.h"
 #include "common.h"
 #include "event.h"
+#include "timer.h"
 
 namespace glrt {
 
@@ -40,6 +42,10 @@ private:
 
     GLFWwindow *window_;
     MouseEvent mouseEvent;
+
+    std::shared_ptr<VertexArrayObject> vao = nullptr;
+    std::shared_ptr<ShaderProgram> program = nullptr;
+    Timer timer;
 };
 
 }  // namespace glrt
