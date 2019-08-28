@@ -8,7 +8,7 @@ layout(location = 0) out vec4 out_color;
 layout(location = 1) out vec4 out_count;
 
 uniform float u_seed;
-uniform int u_maxDepth = 5;
+uniform int u_maxDepth = 8;
 uniform int u_nSamples = 8;
 uniform vec2 u_windowSize;
 uniform mat4 u_mvMat;
@@ -45,7 +45,7 @@ Sphere spheres[] = Sphere[]( //Scene: radius, position, emission, color, materia
     Sphere(1e4, vec3(50, 1e4, 81.6),    vec3(0.0),vec3(.75,.75,.75),DIFF),//Botm
     Sphere(1e4, vec3(50,-1e4+81.6,81.6),vec3(0.0),vec3(.75,.75,.75),DIFF),//Top
     Sphere(16.5,vec3(27,16.5,47),       vec3(0.0),vec3(1,1,1)*.999, SPEC),//Mirr
-    Sphere(16.5,vec3(73,16.5,78),       vec3(0.0),vec3(1,1,1)*.999, SPEC),//Glas
+    Sphere(16.5,vec3(73,16.5,78),       vec3(0.0),vec3(1,1,1)*.999, REFR),//Glas
     Sphere(600, vec3(50,681.6-.27,81.6),vec3(12,12,12),  vec3(0.0), DIFF) //Lite
 );
 
@@ -142,7 +142,36 @@ vec3 radiance(in Ray ray){
             r = Ray(x, d);
         } else if (obj.refl == SPEC) {
             r = Ray(x, r.d - n * 2.0 * dot(n, r.d));
-        }
+        } else if (obj.refl == REFR) {
+			Ray reflRay = Ray(x, r.d - n * 2.0 * dot(n, r.d)); 
+			bool into = dot(n, nl) > 0.0;
+			float nc = 1.0;
+			float nt = 1.5;
+			float nnt = into ? nc / nt : nt / nc;
+			float ddn = dot(r.d, nl);
+			float cos2t = 1.0 - nnt * nnt * (1.0 - ddn * ddn);
+			if (cos2t < 0.0) {
+				// Total reflection
+				r = reflRay;
+			} else {
+				vec3 tdir = normalize(r.d * nnt - n * ((into ? 1.0 : -1.0) * (ddn * nnt + sqrt(cos2t))));
+				float a = nt - nc;
+				float b = nt + nc;
+				float R0 = (a * a) / (b * b);
+				float c = 1.0 - (into ? -ddn : dot(tdir, n));
+				float Re = R0 + (1.0 - R0) * (c * c * c * c * c);
+				float P = 0.25 + 0.5 * Re;
+				if (rand() < P) {
+					// Reflection
+					r = reflRay;
+					beta *= Re / P;
+				} else {
+					// Refraction
+					r = Ray(x, tdir);
+					beta *= (1.0 - Re) / (1.0 - P);
+				}
+			}
+		}
     }
 
     return L;
