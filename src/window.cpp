@@ -181,6 +181,13 @@ void Window::initialize() {
     fbo[1] = std::make_shared<FramebufferObject>(width(), height(), GL_RGBA32F, GL_RGBA, GL_FLOAT);
     fbo[1]->addColorAttachment(width(), height(), GL_R32F, GL_RED, GL_FLOAT);
 
+    fbo[0]->bind();
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    fbo[0]->unbind();
+    fbo[1]->bind();
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    fbo[0]->unbind();
+
     // Shader
     screenProgram = std::make_shared<ShaderProgram>();
     screenProgram->create();
@@ -282,6 +289,13 @@ void Window::resizeDefault(int width, int height) {
     fbo[0]->addColorAttachment(renderBufferWidth, renderBufferHeight, GL_R32F, GL_RED, GL_FLOAT);
     fbo[1] = std::make_shared<FramebufferObject>(renderBufferWidth, renderBufferHeight, GL_RGBA32F, GL_RGBA, GL_FLOAT);
     fbo[1]->addColorAttachment(renderBufferWidth, renderBufferHeight, GL_R32F, GL_RED, GL_FLOAT);
+
+    fbo[0]->bind();
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    fbo[0]->unbind();
+    fbo[1]->bind();
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    fbo[0]->unbind();
 }
 
 void Window::mouseDefault(int button, int action, int mods) {
