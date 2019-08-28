@@ -45,6 +45,8 @@ include_directories(${GLRT_INCLUDE_DIR} ${GLM_INCLUDE_DIRS} ${GLFW3_INCLUDE_DIRS
 add_executable(${BUILD_TARGET} ${SOURCE_FILES} ${EXTERNAL_FILES} ${SHADER_FILES})
 
 source_group("Shader Files" FILES ${SHADER_FILES})
+source_group("External Files" FILES ${EXTERNAL_FILES})
+source_group("Source Files" FILES ${SOURCE_FILES})
 
 target_link_libraries(${BUILD_TARGET} ${OPENGL_LIBRARIES} ${GLFW3_LIBRARIES} ${CXX_FS_LIBRARY})
 

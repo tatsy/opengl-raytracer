@@ -1,6 +1,8 @@
 #define GLRT_API_EXPORT
 #include "window.h"
 
+#include <random>
+
 #include <imgui.h>
 #include <imgui_impl_opengl3.h>
 #include <imgui_impl_glfw.h>
@@ -8,6 +10,7 @@
 #include "common.h"
 #include "timer.h"
 #include "vertex_array_object.h"
+#include "framebuffer_object.h"
 #include "shader_program.h"
 
 static void error_callback(int err, const char *desc) {
@@ -94,7 +97,6 @@ void Window::mainloop(double fps) {
     // User's initialization
     initialize();
 
-
     // Update window size (for Apple's Letina display)
     int renderBufferWidth, renderBufferHeight;
     glfwGetFramebufferSize(window_, &renderBufferWidth, &renderBufferHeight);
@@ -102,7 +104,7 @@ void Window::mainloop(double fps) {
 
     // Mainloop
     timer.start();
-    double duration;
+    double duration = 1.0;
     while (glfwWindowShouldClose(window_) == GLFW_FALSE) {
         // Handle events
         glfwPollEvents();
@@ -169,16 +171,33 @@ void Window::initialize() {
     glEnable(GL_DEPTH_TEST);
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 
+    // VAO
     vao = std::make_shared<VertexArrayObject>();
 
-    program = std::make_shared<ShaderProgram>();
-    program->create();
-    program->attachShader(ShaderStage::fromFile("screen.vert", ShaderType::Vertex));
-    program->attachShader(ShaderStage::fromFile("screen.frag", ShaderType::Fragment));
-    program->link();
+    // FBO
+    fbo[0] = std::make_shared<FramebufferObject>(width(), height(), GL_RGBA32F, GL_RGBA, GL_FLOAT);
+    fbo[0]->addColorAttachment(width(), height(), GL_R32F, GL_RED, GL_FLOAT);
+    fbo[1] = std::make_shared<FramebufferObject>(width(), height(), GL_RGBA32F, GL_RGBA, GL_FLOAT);
+    fbo[1]->addColorAttachment(width(), height(), GL_R32F, GL_RED, GL_FLOAT);
+
+    // Shader
+    screenProgram = std::make_shared<ShaderProgram>();
+    screenProgram->create();
+    screenProgram->attachShader(ShaderStage::fromFile("screen.vert", ShaderType::Vertex));
+    screenProgram->attachShader(ShaderStage::fromFile("screen.frag", ShaderType::Fragment));
+    screenProgram->link();
+
+    rtProgram = std::make_shared<ShaderProgram>();
+    rtProgram->create();
+    rtProgram->attachShader(ShaderStage::fromFile("raytrace.vert", ShaderType::Vertex));
+    rtProgram->attachShader(ShaderStage::fromFile("raytrace.frag", ShaderType::Fragment));
+    rtProgram->link();
 }
 
 void Window::render() {
+    static int select = 0;
+    select ^= 0x1;
+
     glm::vec3 org = glm::vec3(50.0f, 52.0f, 295.6f);
     glm::vec3 dir = glm::vec3(0.0f, -0.042612f, -1.0f);
     glm::mat4 camMat = glm::lookAt(org + 140.0f * dir,
@@ -186,20 +205,62 @@ void Window::render() {
                                    glm::vec3(0.0f, 1.0f, 0.0f));
     glm::mat4 projMat = glm::perspective(glm::radians(70.0f), (float)width() / (float)height(), 1.0f, 100.0f);
 
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-    program->start();
+    rtProgram->start();
+    fbo[select]->bind();
     vao->bind();
 
-    program->setMatrix4x4("u_mvMat", camMat);
-    program->setMatrix4x4("u_projMat", projMat);
-    program->setUniform1f("u_time", (float)timer.count());
-    program->setUniform2f("u_windowSize", glm::vec2((float)width(), (float)height()));
+    GLenum bufs[] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 };
+    glDrawBuffers(2, bufs);
+
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    static std::random_device randev;
+    static std::mt19937 mt(randev());
+    static std::uniform_real_distribution<float> dist;
+
+    rtProgram->setMatrix4x4("u_mvMat", camMat);
+    rtProgram->setMatrix4x4("u_projMat", projMat);
+    rtProgram->setUniform1f("u_seed", dist(mt));
+    rtProgram->setUniform1i("u_nSamples", 4);
+    rtProgram->setUniform2f("u_windowSize", glm::vec2((float)width(), (float)height()));
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, fbo[select ^ 0x1]->textureId(0));
+    rtProgram->setUniform1i("u_framebuffer", 0);
+
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, fbo[select ^0x01]->textureId(1));
+    rtProgram->setUniform1i("u_counter", 1);
+
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+
+    fbo[select]->unbind();
+    vao->unbind();
+    rtProgram->end();
+
+    // Render to screen
+    screenProgram->start();
+    vao->bind();
+
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    screenProgram->setMatrix4x4("u_mvMat", camMat);
+    screenProgram->setMatrix4x4("u_projMat", projMat);
+    screenProgram->setUniform2f("u_windowSize", glm::vec2((float)width(), (float)height()));
+
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, fbo[select]->textureId(0));
+    screenProgram->setUniform1i("u_framebuffer", 0);
+
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, fbo[select]->textureId(1));
+    screenProgram->setUniform1i("u_counter", 1);
 
     glDrawArrays(GL_TRIANGLES, 0, 6);
 
     vao->unbind();
-    program->end();
+    screenProgram->end();
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -214,6 +275,12 @@ void Window::resizeDefault(int width, int height) {
     int renderBufferWidth, renderBufferHeight;
     glfwGetFramebufferSize(window_, &renderBufferWidth, &renderBufferHeight);
     glViewport(0, 0, renderBufferWidth, renderBufferHeight);
+
+    // Update FBO
+    fbo[0] = std::make_shared<FramebufferObject>(renderBufferWidth, renderBufferHeight, GL_RGBA32F, GL_RGBA, GL_FLOAT);
+    fbo[0]->addColorAttachment(renderBufferWidth, renderBufferHeight, GL_R32F, GL_RED, GL_FLOAT);
+    fbo[1] = std::make_shared<FramebufferObject>(renderBufferWidth, renderBufferHeight, GL_RGBA32F, GL_RGBA, GL_FLOAT);
+    fbo[1]->addColorAttachment(renderBufferWidth, renderBufferHeight, GL_R32F, GL_RED, GL_FLOAT);
 }
 
 void Window::mouseDefault(int button, int action, int mods) {

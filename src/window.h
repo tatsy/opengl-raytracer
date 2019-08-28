@@ -44,7 +44,10 @@ private:
     MouseEvent mouseEvent;
 
     std::shared_ptr<VertexArrayObject> vao = nullptr;
-    std::shared_ptr<ShaderProgram> program = nullptr;
+    std::shared_ptr<FramebufferObject> fbo[2] = { 0 };
+    std::shared_ptr<ShaderProgram> screenProgram = nullptr;
+    std::shared_ptr<ShaderProgram> rtProgram = nullptr;
+    int trials = 0;
     Timer timer;
 };
 
