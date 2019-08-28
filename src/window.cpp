@@ -133,7 +133,8 @@ void Window::mainloop(double fps) {
 //            if (ImGui::Button("Capture")) {
 //                saveCurrentFrame(outFile);
 //            }
-            ImGui::End();
+//            ImGui::End();
+
             ImGui::Render();
 
             int screenWidth, screenHeight;
@@ -229,7 +230,7 @@ void Window::render() {
     rtProgram->setUniform1i("u_framebuffer", 0);
 
     glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, fbo[select ^0x01]->textureId(1));
+    glBindTexture(GL_TEXTURE_2D, fbo[select ^ 0x1]->textureId(1));
     rtProgram->setUniform1i("u_counter", 1);
 
     glDrawArrays(GL_TRIANGLES, 0, 6);

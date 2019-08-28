@@ -17,13 +17,13 @@ public:
 
     inline int width() const {
         int width, height;
-        glfwGetWindowSize(window_, &width, &height);
+        glfwGetFramebufferSize(window_, &width, &height);
         return width;
     }
 
     inline int height() const {
         int width, height;
-        glfwGetWindowSize(window_, &width, &height);
+        glfwGetFramebufferSize(window_, &width, &height);
         return height;
     }
 
