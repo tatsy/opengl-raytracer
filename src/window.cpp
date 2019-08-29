@@ -2,6 +2,9 @@
 #include "window.h"
 
 #include <random>
+#include <experimental/filesystem>
+
+#include <stb_image_write.h>
 
 #include <imgui.h>
 #include <imgui_impl_opengl3.h>
@@ -12,6 +15,8 @@
 #include "vertex_array_object.h"
 #include "framebuffer_object.h"
 #include "shader_program.h"
+
+namespace fs = std::experimental::filesystem;
 
 static void error_callback(int err, const char *desc) {
     printf("GLFW error: %s (%d)\n", desc, err);
@@ -123,17 +128,16 @@ void Window::mainloop(double fps) {
             ImGui::Text("GLSL: %s", glGetString(GL_SHADING_LANGUAGE_VERSION));
             ImGui::Text("FPS: %7.3f", 1.0 / duration);
             ImGui::Text("Size: %d x %d", width(), height());
-            ImGui::End();
 
-//            ImGui::Begin("Capture frame");
-//            static char temp[256] = "output.png";
-//            ImGui::InputText(": file name", temp, IM_ARRAYSIZE(temp));
-//
-//            outFile = std::string(temp);
-//            if (ImGui::Button("Capture")) {
-//                saveCurrentFrame(outFile);
-//            }
-//            ImGui::End();
+            static char temp[256] = "output.png";
+            ImGui::InputText(": file name", temp, IM_ARRAYSIZE(temp));
+
+            const std::string outFile = std::string(temp);
+            if (ImGui::Button("Capture")) {
+                saveCurrentFrame(outFile);
+            }
+
+            ImGui::End();
 
             ImGui::Render();
 
@@ -176,17 +180,7 @@ void Window::initialize() {
     vao = std::make_shared<VertexArrayObject>();
 
     // FBO
-    fbo[0] = std::make_shared<FramebufferObject>(width(), height(), GL_RGBA32F, GL_RGBA, GL_FLOAT);
-    fbo[0]->addColorAttachment(width(), height(), GL_R32F, GL_RED, GL_FLOAT);
-    fbo[1] = std::make_shared<FramebufferObject>(width(), height(), GL_RGBA32F, GL_RGBA, GL_FLOAT);
-    fbo[1]->addColorAttachment(width(), height(), GL_R32F, GL_RED, GL_FLOAT);
-
-    fbo[0]->bind();
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    fbo[0]->unbind();
-    fbo[1]->bind();
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    fbo[0]->unbind();
+    resetBuffer();
 
     // Shader
     screenProgram = std::make_shared<ShaderProgram>();
@@ -256,7 +250,6 @@ void Window::render() {
     screenProgram->setMatrix4x4("u_projMat", projMat);
     screenProgram->setUniform2f("u_windowSize", glm::vec2((float)width(), (float)height()));
 
-
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, fbo[select]->textureId(0));
     screenProgram->setUniform1i("u_framebuffer", 0);
@@ -285,17 +278,7 @@ void Window::resizeDefault(int width, int height) {
     glViewport(0, 0, renderBufferWidth, renderBufferHeight);
 
     // Update FBO
-    fbo[0] = std::make_shared<FramebufferObject>(renderBufferWidth, renderBufferHeight, GL_RGBA32F, GL_RGBA, GL_FLOAT);
-    fbo[0]->addColorAttachment(renderBufferWidth, renderBufferHeight, GL_R32F, GL_RED, GL_FLOAT);
-    fbo[1] = std::make_shared<FramebufferObject>(renderBufferWidth, renderBufferHeight, GL_RGBA32F, GL_RGBA, GL_FLOAT);
-    fbo[1]->addColorAttachment(renderBufferWidth, renderBufferHeight, GL_R32F, GL_RED, GL_FLOAT);
-
-    fbo[0]->bind();
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    fbo[0]->unbind();
-    fbo[1]->bind();
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    fbo[0]->unbind();
+    resetBuffer();
 }
 
 void Window::mouseDefault(int button, int action, int mods) {
@@ -325,6 +308,56 @@ void Window::cursorPosDefault(double xpos, double ypos) {
     const auto mods = mouseEvent.modifier();
     mouseEvent = MouseEvent(button, MouseAction::Move, mods, xpos, ypos, width, height);
     mouse(mouseEvent);
+}
+
+void Window::resetBuffer() {
+    fbo[0] = std::make_shared<FramebufferObject>(width(), height(), GL_RGB32F, GL_RGB, GL_FLOAT);
+    fbo[0]->addColorAttachment(width(), height(), GL_R32F, GL_RED, GL_FLOAT);
+    fbo[1] = std::make_shared<FramebufferObject>(width(), height(), GL_RGB32F, GL_RGB, GL_FLOAT);
+    fbo[1]->addColorAttachment(width(), height(), GL_R32F, GL_RED, GL_FLOAT);
+
+    GLenum bufs[] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 };
+    fbo[0]->bind();
+    glDrawBuffers(2, bufs);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    fbo[0]->unbind();
+    fbo[1]->bind();
+    glDrawBuffers(2, bufs);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    fbo[0]->unbind();
+}
+
+void Window::saveCurrentFrame(const std::string &filename) const {
+    // Read pixels
+    const int w = width();
+    const int h = height();
+    auto bytes = std::make_unique<uint8_t[]>(w * h * 4);
+    glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, (void*)bytes.get());
+
+    // Invert vertically
+    for (int y = 0; y < h / 2; y++) {
+        for (int x = 0; x < w; x++) {
+            const int iy = h - y - 1;
+            for (int c = 0; c < 4; c++) {
+                std::swap(bytes[(y * w + x) * 4 + c], bytes[(iy * w + x) * 4 + c]);
+            }
+        }
+    }
+
+    // Check file existance
+    fs::path filePath(filename.c_str());
+    std::string baseName = filePath.stem().string();
+    std::string ext = filePath.extension().string();
+    int count = 0;
+    while (fs::exists(filePath)) {
+        char temp[256];
+        sprintf(temp, "%s_%d%s", baseName.c_str(), count++, ext.c_str());
+        filePath = fs::path(temp);
+    }
+
+    // Save
+    stbi_write_png(filePath.string().c_str(), w, h, 4, bytes.get(), 0);
+    Info("Save: %s", filePath.string().c_str());
 }
 
 }  // namespace glrt

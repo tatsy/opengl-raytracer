@@ -40,6 +40,9 @@ private:
     void keyboardDefault(int key, int scancode, int action, int mods);
     void cursorPosDefault(double xpos, double ypos);
 
+    void resetBuffer();
+    void saveCurrentFrame(const std::string &filename) const;
+
     GLFWwindow *window_;
     MouseEvent mouseEvent;
 
