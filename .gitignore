@@ -11,3 +11,7 @@ cmake-build-release/*
 
 # MacOS
 .DS_Store
+
+# Other dirs
+scenes/*
+

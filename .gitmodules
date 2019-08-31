@@ -10,3 +10,6 @@
 [submodule "src/ext/tinyply"]
 	path = src/ext/tinyply
 	url = https://github.com/ddiakopoulos/tinyply.git
+[submodule "src/ext/tinyxml2"]
+	path = src/ext/tinyxml2
+	url = https://github.com/leethomason/tinyxml2
