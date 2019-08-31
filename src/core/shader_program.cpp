@@ -58,7 +58,7 @@ GLint ShaderProgram::getUniformLocation(const std::string &name) {
     GLint currentProgramId;
     glGetIntegerv(GL_CURRENT_PROGRAM, &currentProgramId);
     if (currentProgramId != programId) {
-        Warning("Uniform variable %s is set before program is used!", name.c_str());
+        Warn("Uniform variable %s is set before program is used!", name.c_str());
         return -1;
     }
     return glGetUniformLocation(programId, name.c_str());

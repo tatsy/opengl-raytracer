@@ -6,6 +6,7 @@ in vec3 f_posCamSpace;
 
 out vec4 out_color;
 
+uniform float u_gamma = 2.2;
 uniform vec2 u_windowSize;
 
 uniform sampler2D u_framebuffer;
@@ -17,8 +18,8 @@ void main() {
 	float count = texture(u_counter, uv).x;
 
 	vec3 L = rgb / count;
-    L.x = pow(clamp(L.x, 0.0, 1.0), 1.0 / 2.2);
-    L.y = pow(clamp(L.y, 0.0, 1.0), 1.0 / 2.2);
-    L.z = pow(clamp(L.z, 0.0, 1.0), 1.0 / 2.2);
+    L.x = pow(clamp(L.x, 0.0, 1.0), 1.0 / u_gamma);
+    L.y = pow(clamp(L.y, 0.0, 1.0), 1.0 / u_gamma);
+    L.z = pow(clamp(L.z, 0.0, 1.0), 1.0 / u_gamma);
     out_color = vec4(L, 1.0);
 }

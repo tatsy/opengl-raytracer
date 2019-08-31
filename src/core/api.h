@@ -7,6 +7,7 @@
 class VertexArrayObject;
 class FramebufferObject;
 class ShaderProgram;
+class Texture;
 
 // -----------------------------------------------------------------------------
 // API export macro

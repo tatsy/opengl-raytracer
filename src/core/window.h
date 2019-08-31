@@ -7,13 +7,14 @@
 #include "common.h"
 #include "event.h"
 #include "timer.h"
+#include "scene.h"
 
 namespace glrt {
 
 class GLRT_API Window {
 public:
-    Window(const std::string &title, int width, int height);
-    void mainloop(double fps = -1.0);
+    Window();
+    void mainloop(const std::shared_ptr<Scene> &scene, double fps = -1.0);
 
     inline int width() const {
         int width, height;
@@ -30,7 +31,7 @@ public:
 protected:
     virtual void initialize();
     virtual void render();
-    virtual void resize(int width, int height) {}
+    virtual void resize(int width, int height) { resizeDefault(width, height); }
     virtual void mouse(const MouseEvent &ev) {}
     virtual void keyboard(int key, int scancode, int action, int mods) {}
 
@@ -52,6 +53,8 @@ private:
     std::shared_ptr<ShaderProgram> rtProgram = nullptr;
     int trials = 0;
     Timer timer;
+
+    std::shared_ptr<Scene> scene = nullptr;
 };
 
 }  // namespace glrt

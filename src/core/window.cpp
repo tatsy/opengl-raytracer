@@ -24,7 +24,8 @@ static void error_callback(int err, const char *desc) {
 
 namespace glrt {
 
-Window::Window(const std::string &title, int width, int height) {
+Window::Window() {
+
     // Set error callback
     glfwSetErrorCallback(error_callback);
 
@@ -51,7 +52,7 @@ Window::Window(const std::string &title, int width, int height) {
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
     // Create window
-    window_ = glfwCreateWindow(width, height, title.c_str(), nullptr, nullptr);
+    window_ = glfwCreateWindow(512, 512, "OpenGL ray tracer", nullptr, nullptr);
     if (!window_) {
         glfwTerminate();
         FatalError("Failed to create GLFW window!");
@@ -98,7 +99,11 @@ Window::Window(const std::string &title, int width, int height) {
     glfwSetKeyCallback(window_, keyboardCallback);
 }
 
-void Window::mainloop(double fps) {
+void Window::mainloop(const std::shared_ptr<Scene> &scene, double fps) {
+    // Set scene and resize window
+    this->scene = scene;
+    resize(scene->width, scene->height);
+
     // User's initialization
     initialize();
 
@@ -200,13 +205,6 @@ void Window::render() {
     static int select = 0;
     select ^= 0x1;
 
-    glm::vec3 org = glm::vec3(50.0f, 52.0f, 295.6f);
-    glm::vec3 dir = glm::vec3(0.0f, -0.042612f, -1.0f);
-    glm::mat4 camMat = glm::lookAt(org + 140.0f * dir,
-                                   org + 141.0f * dir,
-                                   glm::vec3(0.0f, 1.0f, 0.0f));
-    glm::mat4 projMat = glm::perspective(glm::radians(70.0f), (float)width() / (float)height(), 1.0f, 100.0f);
-
     rtProgram->start();
     fbo[select]->bind();
     vao->bind();
@@ -220,11 +218,16 @@ void Window::render() {
     static std::mt19937 mt(randev());
     static std::uniform_real_distribution<float> dist;
 
+    const glm::mat4 camMat = scene->viewM * scene->modelM;
     rtProgram->setMatrix4x4("u_mvMat", camMat);
-    rtProgram->setMatrix4x4("u_projMat", projMat);
-    rtProgram->setUniform1f("u_seed", dist(mt));
+    rtProgram->setMatrix4x4("u_projMat", scene->projM);
+    rtProgram->setUniform2f("u_seed", glm::vec2(dist(mt), dist(mt)));
     rtProgram->setUniform1i("u_nSamples", 4);
     rtProgram->setUniform2f("u_windowSize", glm::vec2((float)width(), (float)height()));
+
+    rtProgram->setUniform1i("u_nTris", (int)scene->triangles.size());
+    rtProgram->setUniform1i("u_nLights", (int)scene->lights.size());
+
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, fbo[select ^ 0x1]->textureId(0));
@@ -233,6 +236,22 @@ void Window::render() {
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, fbo[select ^ 0x1]->textureId(1));
     rtProgram->setUniform1i("u_counter", 1);
+
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_BUFFER, scene->vertTexId);
+    rtProgram->setUniform1i("u_vertBuffer", 2);
+
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_BUFFER, scene->triTexId);
+    rtProgram->setUniform1i("u_triBuffer", 3);
+
+    glActiveTexture(GL_TEXTURE4);
+    glBindTexture(GL_TEXTURE_BUFFER, scene->matTexId);
+    rtProgram->setUniform1i("u_matBuffer", 4);
+
+    glActiveTexture(GL_TEXTURE5);
+    glBindTexture(GL_TEXTURE_BUFFER, scene->lightTexId);
+    rtProgram->setUniform1i("u_lightBuffer", 5);
 
     glDrawArrays(GL_TRIANGLES, 0, 6);
 
@@ -247,7 +266,7 @@ void Window::render() {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     screenProgram->setMatrix4x4("u_mvMat", camMat);
-    screenProgram->setMatrix4x4("u_projMat", projMat);
+    screenProgram->setMatrix4x4("u_projMat", scene->projM);
     screenProgram->setUniform2f("u_windowSize", glm::vec2((float)width(), (float)height()));
 
     glActiveTexture(GL_TEXTURE0);

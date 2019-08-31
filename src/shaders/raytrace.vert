@@ -1,5 +1,10 @@
 #version 410
 precision highp float;
+//#extension GL_ARB_gpu_shader_fp64 : enable
+//#define float double
+//#define vec2 dvec2
+//#define vec3 dvec3
+//#define vec4 dvec4
 
 out vec3 f_camPosWorldSpace;
 out vec3 f_posCamSpace;

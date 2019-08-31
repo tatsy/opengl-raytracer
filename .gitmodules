@@ -13,3 +13,6 @@
 [submodule "src/ext/tinyxml2"]
 	path = src/ext/tinyxml2
 	url = https://github.com/leethomason/tinyxml2
+[submodule "src/ext/json11"]
+	path = src/ext/json11
+	url = https://github.com/dropbox/json11
