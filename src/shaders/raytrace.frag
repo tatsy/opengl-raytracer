@@ -1,6 +1,6 @@
 #version 410
 precision highp float;
-#extension GL_ARB_gpu_shader_fp64 : enable
+//#extension GL_ARB_gpu_shader_fp64 : enable
 //#define float double
 //#define vec2 dvec2
 //#define vec3 dvec3
@@ -123,7 +123,7 @@ bool intersect(in Ray ray, out float t, out vec3 norm, out int mtrlID) {
 	return hit;
 }
 
-vec3 sampleDirect(vec3 x, vec3 n) {
+vec3 sampleDirect(in vec3 x, in vec3 n) {
 	int lightID = min(int(rand() * u_nLights), u_nLights - 1);
 
 	vec2 u = vec2(rand(), rand());
@@ -224,7 +224,7 @@ vec3 radiance(in Ray ray){
     return L;
 }
 
-void main() {
+void main(void) {
     randState = gl_FragCoord.xy / u_windowSize;
 
     Ray ray = Ray(

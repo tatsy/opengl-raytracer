@@ -23,7 +23,7 @@ uint indices[] = uint[](
     0u, 1u, 3u, 0u, 3u, 2u
 );
 
-void main() {
+void main(void) {
 	gl_Position = vec4(positions[indices[gl_VertexID]], 0.0, 1.0);
 
 	vec4 temp;
