@@ -25,6 +25,13 @@ struct Triangle {
 struct Material {
     glm::vec3 E = glm::vec3(0.0f);
     glm::vec3 Kd = glm::vec3(0.0f);
+    glm::vec3 tex = glm::vec3(0.0f);
+};
+
+struct VolumeData {
+    glm::vec3 bboxMax, bboxMin;
+    float maxValue;
+    GLuint densityTex, temperatureTex;
 };
 
 class GLRT_API Scene : private Uncopyable {
@@ -48,6 +55,8 @@ private:
     GLuint triTexId, triBufId;
     GLuint matTexId, matBufId;
     GLuint lightTexId, lightBufId;
+
+    std::vector<VolumeData> volumes;
 
     friend class Window;
 };

@@ -6,6 +6,8 @@
 
 #include <stb_image_write.h>
 
+#include <glm/gtx/string_cast.hpp>
+
 #include <imgui.h>
 #include <imgui_impl_opengl3.h>
 #include <imgui_impl_glfw.h>
@@ -126,23 +128,23 @@ void Window::mainloop(const std::shared_ptr<Scene> &scene, double fps) {
             ImGui_ImplGlfw_NewFrame();
             ImGui::NewFrame();
 
-            ImGui::Begin("Status");
-            ImGui::Text("Vendor: %s", glGetString(GL_VENDOR));
-            ImGui::Text("Renderer: %s", glGetString(GL_RENDERER));
-            ImGui::Text("OpenGL: %s", glGetString(GL_VERSION));
-            ImGui::Text("GLSL: %s", glGetString(GL_SHADING_LANGUAGE_VERSION));
-            ImGui::Text("FPS: %7.3f", 1.0 / duration);
-            ImGui::Text("Size: %d x %d", width(), height());
-
-            static char temp[256] = "output.png";
-            ImGui::InputText(": file name", temp, IM_ARRAYSIZE(temp));
-
-            const std::string outFile = std::string(temp);
-            if (ImGui::Button("Capture")) {
-                saveCurrentFrame(outFile);
-            }
-
-            ImGui::End();
+//            ImGui::Begin("Status");
+//            ImGui::Text("Vendor: %s", glGetString(GL_VENDOR));
+//            ImGui::Text("Renderer: %s", glGetString(GL_RENDERER));
+//            ImGui::Text("OpenGL: %s", glGetString(GL_VERSION));
+//            ImGui::Text("GLSL: %s", glGetString(GL_SHADING_LANGUAGE_VERSION));
+//            ImGui::Text("FPS: %7.3f", 1.0 / duration);
+//            ImGui::Text("Size: %d x %d", width(), height());
+//
+//            static char temp[256] = "output.png";
+//            ImGui::InputText(": file name", temp, IM_ARRAYSIZE(temp));
+//
+//            const std::string outFile = std::string(temp);
+//            if (ImGui::Button("Capture")) {
+//                saveCurrentFrame(outFile);
+//            }
+//
+//            ImGui::End();
 
             ImGui::Render();
 
@@ -157,6 +159,8 @@ void Window::mainloop(const std::shared_ptr<Scene> &scene, double fps) {
 
             glfwMakeContextCurrent(window_);
             glfwSwapBuffers(window_);
+
+            saveCurrentFrame("output.png");
 
             // Reset timer
             duration = timer.count();
@@ -228,7 +232,7 @@ void Window::render() {
     rtProgram->setUniform1i("u_nTris", (int)scene->triangles.size());
     rtProgram->setUniform1i("u_nLights", (int)scene->lights.size());
 
-
+    // Screen textures
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, fbo[select ^ 0x1]->textureId(0));
     rtProgram->setUniform1i("u_framebuffer", 0);
@@ -237,6 +241,7 @@ void Window::render() {
     glBindTexture(GL_TEXTURE_2D, fbo[select ^ 0x1]->textureId(1));
     rtProgram->setUniform1i("u_counter", 1);
 
+    // Scene texture buffers
     glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_BUFFER, scene->vertTexId);
     rtProgram->setUniform1i("u_vertBuffer", 2);
@@ -252,6 +257,21 @@ void Window::render() {
     glActiveTexture(GL_TEXTURE5);
     glBindTexture(GL_TEXTURE_BUFFER, scene->lightTexId);
     rtProgram->setUniform1i("u_lightBuffer", 5);
+
+    // Volume textures
+    if (!scene->volumes.empty()) {
+        rtProgram->setUniform3f("u_bboxMin", scene->volumes[0].bboxMin);
+        rtProgram->setUniform3f("u_bboxMax", scene->volumes[0].bboxMax);
+        rtProgram->setUniform1f("u_densityMax", scene->volumes[0].maxValue);
+
+        glActiveTexture(GL_TEXTURE6);
+        glBindTexture(GL_TEXTURE_3D, scene->volumes[0].densityTex);
+        rtProgram->setUniform1i("u_densityTex", 6);
+
+        glActiveTexture(GL_TEXTURE7);
+        glBindTexture(GL_TEXTURE_3D, scene->volumes[0].temperatureTex);
+        rtProgram->setUniform1i("u_temperatureTex", 7);
+    }
 
     glDrawArrays(GL_TRIANGLES, 0, 6);
 

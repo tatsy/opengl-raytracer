@@ -15,6 +15,7 @@ using namespace json11;
 
 #include "common.h"
 #include "texture.h"
+#include "volume.h"
 
 namespace glrt {
 
@@ -101,9 +102,50 @@ void Scene::parse(const std::string &filename) {
             mtrl.E = glm::vec3(shapes[i]["emission"][0].number_value(),
                                shapes[i]["emission"][1].number_value(),
                                shapes[i]["emission"][2].number_value());
-            mtrl.Kd = glm::vec3(shapes[i]["reflectance"][0].number_value(),
-                                shapes[i]["reflectance"][1].number_value(),
-                                shapes[i]["reflectance"][2].number_value());
+//            mtrl.Kd = glm::vec3(shapes[i]["reflectance"][0].number_value(),
+//                                shapes[i]["reflectance"][1].number_value(),
+//                                shapes[i]["reflectance"][2].number_value());
+        } else if(material == "volume") {
+            const int baseIndex = volumes.size();
+            VolumeData voldata;
+            {
+                const std::string &filename = shapes[i]["volume"]["density"].string_value();
+                Volume volume;
+                volume.load((baseDirPath / fs::path(filename.c_str())).string());
+
+                GLuint texId;
+                glGenTextures(1, &texId);
+                glBindTexture(GL_TEXTURE_3D, texId);
+                glTexStorage3D(GL_TEXTURE_3D, 1, GL_R32F, volume.size_x, volume.size_y, volume.size_z);
+                glTexSubImage3D(GL_TEXTURE_3D, 0, 0, 0, 0, volume.size_x, volume.size_y, volume.size_z, GL_RED,
+                                GL_FLOAT, volume.data);
+
+                voldata.densityTex = texId;
+                voldata.maxValue = volume.maxValue;
+                voldata.bboxMin = glm::vec3(shapes[i]["volume"]["bboxMin"][0].number_value(),
+                                            shapes[i]["volume"]["bboxMin"][1].number_value(),
+                                            shapes[i]["volume"]["bboxMin"][2].number_value());
+                voldata.bboxMax = glm::vec3(shapes[i]["volume"]["bboxMax"][0].number_value(),
+                                            shapes[i]["volume"]["bboxMax"][1].number_value(),
+                                            shapes[i]["volume"]["bboxMax"][2].number_value());
+            }
+
+            {
+                const std::string &filename = shapes[i]["volume"]["temperature"].string_value();
+                Volume volume;
+                volume.load((baseDirPath / fs::path(filename.c_str())).string());
+
+                GLuint texId;
+                glGenTextures(1, &texId);
+                glBindTexture(GL_TEXTURE_3D, texId);
+                glTexStorage3D(GL_TEXTURE_3D, 1, GL_R32F, volume.size_x, volume.size_y, volume.size_z);
+                glTexSubImage3D(GL_TEXTURE_3D, 0, 0, 0, 0, volume.size_x, volume.size_y, volume.size_z, GL_RED,
+                                GL_FLOAT, volume.data);
+
+                voldata.temperatureTex = texId;
+            }
+            volumes.push_back(voldata);
+            mtrl.tex = glm::vec3(baseIndex, baseIndex + 1, 0.0);
         } else {
             FatalError("Unsupported material: %s", material.c_str());
         }
@@ -165,6 +207,8 @@ void Scene::parse(const std::string &filename) {
     glBufferData(GL_TEXTURE_BUFFER, lights.size() * sizeof(Triangle), lights.data(), GL_STATIC_DRAW);
     glBindTexture(GL_TEXTURE_BUFFER, lightTexId);
     glTexBuffer(GL_TEXTURE_BUFFER, GL_RGBA32F, lightBufId);
+
+    printf("OK!\n");
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
