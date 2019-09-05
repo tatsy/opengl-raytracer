@@ -13,8 +13,8 @@ layout(location = 0) out vec4 out_color;
 layout(location = 1) out vec4 out_count;
 
 uniform vec2 u_seed;
-uniform int u_maxDepth = 8;
-uniform int u_nSamples = 8;
+uniform int u_maxDepth = 16;
+uniform int u_nSamples = 16;
 uniform vec2 u_windowSize;
 uniform mat4 u_mvMat;
 
@@ -29,6 +29,8 @@ uniform samplerBuffer u_matBuffer;
 uniform int u_nLights;
 uniform samplerBuffer u_lightBuffer;
 
+uniform samplerBuffer u_bvhBuffer;
+
 uniform float u_densityMax = 1.0;
 uniform vec3 u_bboxMin = vec3(0.0);
 uniform vec3 u_bboxMax = vec3(1.0);
@@ -36,8 +38,8 @@ uniform sampler3D u_densityTex;
 uniform sampler3D u_temperatureTex;
 
 const float PI = 3.14159265358979;
-const float INFTY = 1.0e5;
-const float EPS = 1.0e-3;
+const float INFTY = 1.0e7;
+const float EPS = 1.0e-4;
 
 // ----------------------------------------------------------------------------
 // Structs
@@ -80,6 +82,10 @@ float rand() {
 
 bool isBlack(in vec3 x) {
 	return length(x) == 0.0;
+}
+
+Ray spawnRay(in vec3 org, in vec3 dir) {
+    return Ray(org + dir * EPS, dir);
 }
 
 float bbr(float l, float T) {
@@ -143,36 +149,79 @@ float intersect(in Ray ray, in Triangle tri, out vec3 norm) {
 		return INFTY;
 	}
 
-	norm = (1.0 - u - v) * tri.n[0] + u * tri.n[1] + v * tri.n[2];
+	norm = normalize((1.0 - u - v) * tri.n[0] + u * tri.n[1] + v * tri.n[2]);
 
 	return t;
+}
+
+bool intersectBBox(in Ray ray, vec3 posMin, vec3 posMax) {
+	vec3 invdir = vec3(1.0) / ray.d;
+
+	vec3 f = (posMax - ray.o) * invdir;
+	vec3 n = (posMin - ray.o) * invdir;
+
+	vec3 tmax = max(f, n);
+	vec3 tmin = min(f, n);
+
+	float t1 = min(tmax.x, min(tmax.y, tmax.z));
+	float t0 = max(tmin.x, max(tmin.y, tmin.z));
+
+	return t1 >= t0 - EPS;
 }
 
 bool intersect(in Ray ray, out Intersection isect) {
 	isect.tHit = INFTY;
 	isect.norm = vec3(0.0);
 	isect.mtrl = 0;
-    bool hit = false;
-    for (int i = 0; i < u_nTris; i++) {
-		vec3 ijk = texelFetch(u_triBuffer, i).xyz;
+	bool hit = false;
 
-		Triangle tri;
-        tri.v[0] = texelFetch(u_vertBuffer, int(ijk.x) * 5 + 0).xyz;
-        tri.v[1] = texelFetch(u_vertBuffer, int(ijk.y) * 5 + 0).xyz;
-        tri.v[2] = texelFetch(u_vertBuffer, int(ijk.z) * 5 + 0).xyz;
-        tri.n[0] = texelFetch(u_vertBuffer, int(ijk.x) * 5 + 1).xyz;
-        tri.n[1] = texelFetch(u_vertBuffer, int(ijk.y) * 5 + 1).xyz;
-        tri.n[2] = texelFetch(u_vertBuffer, int(ijk.z) * 5 + 1).xyz;
+	int pos = 0;
+	int stack[128];
 
-		vec3 n;
-        float dist = intersect(ray, tri, n);
-        if (dist < isect.tHit) {
-            isect.tHit = dist;
-			isect.norm = n;
-            isect.mtrl = int(texelFetch(u_triBuffer, i).w);
-			hit = true;
-        }
-    }
+	stack[0] = 0;
+	while (pos >= 0) {
+		int node = stack[pos];
+		pos -= 1;
+
+		vec3 posMin = texelFetch(u_bvhBuffer, node * 3 + 0).xyz;
+		vec3 posMax = texelFetch(u_bvhBuffer, node * 3 + 1).xyz;
+		vec3 children = texelFetch(u_bvhBuffer, node * 3 + 2).xyz;
+		if (children.z < 0.0) {
+			// Fork node
+			if (intersectBBox(ray, posMin, posMax)) {
+				if (children.x >= 0.0) {
+					stack[pos + 1] = int(children.x);
+					pos += 1;
+				}
+
+				if (children.y >= 0.0) {
+					stack[pos + 1] = int(children.y);
+					pos += 1;
+				}
+			}
+		} else {
+			// Leaf node
+			int index = int(children.z);
+			vec3 ijk = texelFetch(u_triBuffer, index).xyz;
+
+			Triangle tri;
+			tri.v[0] = texelFetch(u_vertBuffer, int(ijk.x) * 5 + 0).xyz;
+			tri.v[1] = texelFetch(u_vertBuffer, int(ijk.y) * 5 + 0).xyz;
+			tri.v[2] = texelFetch(u_vertBuffer, int(ijk.z) * 5 + 0).xyz;
+			tri.n[0] = texelFetch(u_vertBuffer, int(ijk.x) * 5 + 1).xyz;
+			tri.n[1] = texelFetch(u_vertBuffer, int(ijk.y) * 5 + 1).xyz;
+			tri.n[2] = texelFetch(u_vertBuffer, int(ijk.z) * 5 + 1).xyz;
+
+			vec3 n;
+			float dist = intersect(ray, tri, n);
+			if (dist < isect.tHit) {
+				isect.tHit = dist;
+				isect.norm = n;
+				isect.mtrl = int(texelFetch(u_triBuffer, index).w);
+				hit = true;
+			}        
+		}
+	}
 
 	return hit;
 }
@@ -186,6 +235,9 @@ vec3 sampleDirect(in vec3 x, in vec3 n) {
 	tri.v[0] = texelFetch(u_vertBuffer, int(ijk.x) * 5 + 0).xyz;
 	tri.v[1] = texelFetch(u_vertBuffer, int(ijk.y) * 5 + 0).xyz;
 	tri.v[2] = texelFetch(u_vertBuffer, int(ijk.z) * 5 + 0).xyz;
+	tri.n[0] = texelFetch(u_vertBuffer, int(ijk.x) * 5 + 1).xyz;
+	tri.n[1] = texelFetch(u_vertBuffer, int(ijk.y) * 5 + 1).xyz;
+	tri.n[2] = texelFetch(u_vertBuffer, int(ijk.z) * 5 + 1).xyz;
 
 	vec2 u = vec2(rand(), rand());
 	if (u.x + u.y > 1.0) {
@@ -193,10 +245,11 @@ vec3 sampleDirect(in vec3 x, in vec3 n) {
 		u.y = 1.0 - u.y;
 	}
 	vec3 p = (1.0 - u.x - u.y) * tri.v[0] + u.x * tri.v[1] + u.y * tri.v[2];
+	vec3 nl = (1.0 - u.x - u.y) * tri.n[0] + u.x * tri.n[1] + u.y * tri.n[2];
 
 	// Cast shadow ray
 	vec3 dir = normalize(p - x);
-	Ray ray = Ray(x, dir);
+	Ray ray = spawnRay(x, dir);
 
 	Intersection isect;
 	bool isHit = intersect(ray, isect);
@@ -207,7 +260,7 @@ vec3 sampleDirect(in vec3 x, in vec3 n) {
 		int mtrlID = int(texelFetch(u_lightBuffer, lightID).w);
 		vec3 e = texelFetch(u_matBuffer, mtrlID * 3 + 0).xyz;
 		float dot0 = max(0.0, dot(ray.d, n));
-		float dot1 = max(0.0, dot(-ray.d, isect.norm));
+		float dot1 = max(0.0, dot(-ray.d, nl));
 		float G = (dot0 * dot1) / (dist * dist);
 		float area = 0.5 * length(cross(tri.v[1] - tri.v[0], tri.v[2] - tri.v[0]));
 		float pdf = 1.0 / (area * float(u_nLights));
@@ -235,7 +288,7 @@ vec3 sampleDirectVolume(in vec3 x) {
     vec3 p = (1.0 - u.x - u.y) * tri.v[0] + u.x * tri.v[1] + u.y * tri.v[2];
 
     vec3 dir = normalize(p - x);
-    Ray ray = Ray(x, dir);
+    Ray ray = spawnRay(x, dir);
 
 	Intersection isect;
     bool isHit = intersect(ray, isect);
@@ -253,10 +306,6 @@ vec3 sampleDirectVolume(in vec3 x) {
     return vec3(0.0);
 }
 
-Ray spawnRay(in vec3 org, in vec3 dir) {
-    return Ray(org + dir * EPS, dir);
-}
-
 vec3 radiance(in Ray r){
     vec3 L = vec3(0.0);
     vec3 beta = vec3(1.0);
@@ -271,13 +320,13 @@ vec3 radiance(in Ray r){
 		vec3 e = texelFetch(u_matBuffer, isect.mtrl * 3 + 0).xyz;
         vec3 f = texelFetch(u_matBuffer, isect.mtrl * 3 + 1).xyz;
 
-		if (isBlack(e) && isBlack(f)) {
+		if (isBlack(e) && isBlack(f) && dot(-ray.d, isect.norm) >= EPS) {
 			// Volume (perform Woodcock tracking)
             vec3 sigS = vec3(1.0, 1.0, 1.0) * 0.1;
-            vec3 sigA = vec3(0.1, 0.1, 0.1) * 0.1;
+            vec3 sigA = vec3(0.1, 0.1, 0.1) * 0.6;
             float sigT = sigS.x + sigA.x;
 
-			int nTrial = 16;
+			int nTrial = 8;
 			vec3 nextOrg = x;
 			vec3 nextDir = ray.d;
 			for (int k = 0; k < nTrial; k++) {
@@ -285,12 +334,12 @@ vec3 radiance(in Ray r){
 				Intersection inext;
 				bool hit = intersect(nextRay, inext);
                 if (!hit) {
-                    return vec3(0, 0, 0);
+                    return vec3(1, 0, 1);
                 }
 
 				float t = 0.0;
                 bool pass = false;
-				for (int i = 0; i < 128; i++) {
+				for (int i = 0; i < 256; i++) {
 					t -= log(max(EPS, 1.0 - rand())) / (u_densityMax * sigT);
 					if (t >= inext.tHit) {
                         pass = true;
@@ -309,7 +358,7 @@ vec3 radiance(in Ray r){
                     return vec3(0.0, 0.0, 0.0);
                 }
 
-				if (t > inext.tHit) {
+				if (t >= inext.tHit) {
                     nextOrg = nextOrg + (inext.tHit + EPS) * nextDir;
                     break;
 				}
@@ -317,11 +366,8 @@ vec3 radiance(in Ray r){
 				nextOrg = nextOrg + t * nextDir;
 
                 // Black body radiation
-				float T = temperatureLookup(nextOrg) * 50.0;
+				float T = temperatureLookup(nextOrg) * 100.0;
 				L += beta * blackBody(T) / sigT;
-
-                // Direct lighting
-                //L += beta * (sigS / sigT) * sampleDirectVolume(nextOrg);
 
 				// Sample path direction
 				float theta = acos(2.0 * rand() - 1.0);
@@ -332,6 +378,13 @@ vec3 radiance(in Ray r){
 
                 // Scattering albedo
 				beta *= sigS / sigT;
+
+				// Russian roulette
+//				float p = min(0.95, max(beta.x, max(beta.y, beta.z)));
+//				if (rand() > p) {
+//					return min(L, 1.0e1);
+//				}
+//				beta /= p;
 			}
 
             ray = spawnRay(nextOrg, nextDir);
@@ -344,6 +397,7 @@ vec3 radiance(in Ray r){
 				L += beta * e;
 			}
 		}
+        passedVolume = false;
 
 		if (!isIntersect) {
 			break;
@@ -352,7 +406,7 @@ vec3 radiance(in Ray r){
 		// Direct lighting
         L += f * beta * sampleDirect(x, isect.norm);
 
-		if (length(f) == 0.0) {
+		if (isBlack(f)) {
 			break;
 		}
 		
@@ -368,7 +422,6 @@ vec3 radiance(in Ray r){
 
 		// Update beta
         beta *= f;
-        passedVolume = false;
 
         // Russian roulette
         if (depth > 3) {
@@ -380,7 +433,7 @@ vec3 radiance(in Ray r){
         }
     }
 
-    return L;
+    return min(L, 1.0e1);
 }
 
 void main(void) {

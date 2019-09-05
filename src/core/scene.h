@@ -9,14 +9,9 @@
 #include "api.h"
 #include "uncopyable.h"
 #include "trimesh.h"
+#include "bvh.h"
 
 namespace glrt {
-
-struct BVHNode {
-    glm::vec3 bboxMin;
-    glm::vec3 bboxMax;
-    glm::vec3 children;
-};
 
 struct Triangle {
     glm::vec4 indices;  // i, j, k, mtrlID
@@ -47,14 +42,18 @@ private:
     glm::mat4 modelM, viewM, projM;
 
     std::vector<Vertex> vertices;
+    std::vector<uint32_t> indices;
     std::vector<Triangle> triangles;
     std::vector<Triangle> lights;
     std::vector<Material> materials;
 
-    GLuint vertTexId, vertBufId;
-    GLuint triTexId, triBufId;
-    GLuint matTexId, matBufId;
-    GLuint lightTexId, lightBufId;
+    std::shared_ptr<TextureBuffer> vertTexBuffer;
+    std::shared_ptr<TextureBuffer> triTexBuffer;
+    std::shared_ptr<TextureBuffer> mtrlTexBuffer;
+    std::shared_ptr<TextureBuffer> lightTexBuffer;
+    std::shared_ptr<TextureBuffer> bvhTexBuffer;
+
+    BVH bvh;
 
     std::vector<VolumeData> volumes;
 

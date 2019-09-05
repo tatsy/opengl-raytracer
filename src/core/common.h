@@ -12,8 +12,8 @@ static const double Pi = 4.0 * std::atan(1.0);
 // -----------------------------------------------------------------------------
 
 #define GLM_ENABLE_EXPERIMENTAL
-#include <glm/glm.hpp>
 #include <glad/glad.h>
+#include <glm/glm.hpp>
 #include <glm/gtx/transform.hpp>
 #include <GLFW/glfw3.h>
 

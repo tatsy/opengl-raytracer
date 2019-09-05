@@ -17,6 +17,7 @@
 #include "vertex_array_object.h"
 #include "framebuffer_object.h"
 #include "shader_program.h"
+#include "texture_buffer.h"
 
 namespace fs = std::experimental::filesystem;
 
@@ -102,6 +103,9 @@ Window::Window() {
 }
 
 void Window::mainloop(const std::shared_ptr<Scene> &scene, double fps) {
+    Timer killTimer;
+    killTimer.start();
+
     // Set scene and resize window
     this->scene = scene;
     resize(scene->width, scene->height);
@@ -160,7 +164,13 @@ void Window::mainloop(const std::shared_ptr<Scene> &scene, double fps) {
             glfwMakeContextCurrent(window_);
             glfwSwapBuffers(window_);
 
-            saveCurrentFrame("output.png");
+            if (killTimer.count() > 50.0) {
+                saveCurrentFrame("output.png");
+            }
+
+            if (killTimer.count() > 60.0) {
+                glfwSetWindowShouldClose(window_, true);
+            }
 
             // Reset timer
             duration = timer.count();
@@ -242,21 +252,21 @@ void Window::render() {
     rtProgram->setUniform1i("u_counter", 1);
 
     // Scene texture buffers
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_BUFFER, scene->vertTexId);
+    scene->vertTexBuffer->bind(2);
     rtProgram->setUniform1i("u_vertBuffer", 2);
 
-    glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_BUFFER, scene->triTexId);
+    scene->triTexBuffer->bind(3);
     rtProgram->setUniform1i("u_triBuffer", 3);
 
-    glActiveTexture(GL_TEXTURE4);
-    glBindTexture(GL_TEXTURE_BUFFER, scene->matTexId);
+    scene->mtrlTexBuffer->bind(4);
     rtProgram->setUniform1i("u_matBuffer", 4);
 
-    glActiveTexture(GL_TEXTURE5);
-    glBindTexture(GL_TEXTURE_BUFFER, scene->lightTexId);
+    scene->lightTexBuffer->bind(5);
     rtProgram->setUniform1i("u_lightBuffer", 5);
+
+    // BVH
+    scene->bvhTexBuffer->bind(6);
+    rtProgram->setUniform1i("u_bvhBuffer", 6);
 
     // Volume textures
     if (!scene->volumes.empty()) {
@@ -264,15 +274,16 @@ void Window::render() {
         rtProgram->setUniform3f("u_bboxMax", scene->volumes[0].bboxMax);
         rtProgram->setUniform1f("u_densityMax", scene->volumes[0].maxValue);
 
-        glActiveTexture(GL_TEXTURE6);
-        glBindTexture(GL_TEXTURE_3D, scene->volumes[0].densityTex);
-        rtProgram->setUniform1i("u_densityTex", 6);
-
         glActiveTexture(GL_TEXTURE7);
+        glBindTexture(GL_TEXTURE_3D, scene->volumes[0].densityTex);
+        rtProgram->setUniform1i("u_densityTex", 7);
+
+        glActiveTexture(GL_TEXTURE8);
         glBindTexture(GL_TEXTURE_3D, scene->volumes[0].temperatureTex);
-        rtProgram->setUniform1i("u_temperatureTex", 7);
+        rtProgram->setUniform1i("u_temperatureTex", 8);
     }
 
+    // Draw
     glDrawArrays(GL_TRIANGLES, 0, 6);
 
     fbo[select]->unbind();

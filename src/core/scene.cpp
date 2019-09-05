@@ -15,6 +15,7 @@ using namespace json11;
 
 #include "common.h"
 #include "texture.h"
+#include "texture_buffer.h"
 #include "volume.h"
 
 namespace glrt {
@@ -86,6 +87,7 @@ void Scene::parse(const std::string &filename) {
 
     // Shapes
     vertices.clear();
+    indices.clear();
     triangles.clear();
     lights.clear();
     materials.clear();
@@ -102,9 +104,6 @@ void Scene::parse(const std::string &filename) {
             mtrl.E = glm::vec3(shapes[i]["emission"][0].number_value(),
                                shapes[i]["emission"][1].number_value(),
                                shapes[i]["emission"][2].number_value());
-//            mtrl.Kd = glm::vec3(shapes[i]["reflectance"][0].number_value(),
-//                                shapes[i]["reflectance"][1].number_value(),
-//                                shapes[i]["reflectance"][2].number_value());
         } else if(material == "volume") {
             const int baseIndex = volumes.size();
             VolumeData voldata;
@@ -172,6 +171,10 @@ void Scene::parse(const std::string &filename) {
                 tri.indices.w = materials.size() - 1;
                 triangles.push_back(tri);
 
+                indices.push_back(baseIndex + mesh.indices[i * 3 + 0]);
+                indices.push_back(baseIndex + mesh.indices[i * 3 + 1]);
+                indices.push_back(baseIndex + mesh.indices[i * 3 + 2]);
+
                 if (glm::length(mtrl.E) != 0.0f) {
                     lights.push_back(tri);
                 }
@@ -179,36 +182,28 @@ void Scene::parse(const std::string &filename) {
         }
     }
 
+    // Construct BVH
+    bvh.construct(vertices, indices);
+    bvhTexBuffer = std::make_shared<TextureBuffer>(bvh.nodes.size() * sizeof(BVHNode), GL_RGB32F, GL_STATIC_DRAW);
+    bvhTexBuffer->setData(bvh.nodes.data());
+
     // Transfer to OpenGL
-    glGenTextures(1, &vertTexId);
-    glGenBuffers(1, &vertBufId);
-    glBindBuffer(GL_TEXTURE_BUFFER, vertBufId);
-    glBufferData(GL_TEXTURE_BUFFER, vertices.size() * sizeof(Vertex), vertices.data(), GL_STATIC_DRAW);
-    glBindTexture(GL_TEXTURE_BUFFER, vertTexId);
-    glTexBuffer(GL_TEXTURE_BUFFER, GL_RGB32F, vertBufId);
+    vertTexBuffer = std::make_shared<TextureBuffer>(vertices.size() * sizeof(Vertex), GL_RGB32F, GL_STATIC_DRAW);
+    vertTexBuffer->setData(vertices.data());
 
-    glGenTextures(1, &triTexId);
-    glGenBuffers(1, &triBufId);
-    glBindBuffer(GL_TEXTURE_BUFFER, triBufId);
-    glBufferData(GL_TEXTURE_BUFFER, triangles.size() * sizeof(Triangle), triangles.data(), GL_STATIC_DRAW);
-    glBindTexture(GL_TEXTURE_BUFFER, triTexId);
-    glTexBuffer(GL_TEXTURE_BUFFER, GL_RGBA32F, triBufId);
+    triTexBuffer = std::make_shared<TextureBuffer>(triangles.size() * sizeof(Triangle), GL_RGBA32F, GL_STATIC_DRAW);
+    triTexBuffer->setData(triangles.data());
 
-    glGenTextures(1, &matTexId);
-    glGenBuffers(1, &matBufId);
-    glBindBuffer(GL_TEXTURE_BUFFER, matBufId);
-    glBufferData(GL_TEXTURE_BUFFER, materials.size() * sizeof(Material), materials.data(), GL_STATIC_DRAW);
-    glBindTexture(GL_TEXTURE_BUFFER, matTexId);
-    glTexBuffer(GL_TEXTURE_BUFFER, GL_RGB32F, matBufId);
+    mtrlTexBuffer = std::make_shared<TextureBuffer>(materials.size() * sizeof(Material), GL_RGB32F, GL_STATIC_DRAW);
+    mtrlTexBuffer->setData(materials.data());
 
-    glGenTextures(1, &lightTexId);
-    glGenBuffers(1, &lightBufId);
-    glBindBuffer(GL_TEXTURE_BUFFER, lightBufId);
-    glBufferData(GL_TEXTURE_BUFFER, lights.size() * sizeof(Triangle), lights.data(), GL_STATIC_DRAW);
-    glBindTexture(GL_TEXTURE_BUFFER, lightTexId);
-    glTexBuffer(GL_TEXTURE_BUFFER, GL_RGBA32F, lightBufId);
+    lightTexBuffer = std::make_shared<TextureBuffer>(lights.size() * sizeof(Triangle), GL_RGBA32F, GL_STATIC_DRAW);
+    lightTexBuffer->setData(lights.data());
 
-    printf("OK!\n");
+    Info("Scene setup OK!\n");
+    Info("#vertex: %d", (int)vertices.size());
+    Info("#triangle: %d", (int)triangles.size());
+    Info("#BVH noede: %d", (int)bvh.nodes.size());
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

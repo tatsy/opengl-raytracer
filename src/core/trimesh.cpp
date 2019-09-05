@@ -159,6 +159,7 @@ void Trimesh::loadOBJ(const std::string &filename, bool *hasNorm, bool *hasUV) {
                     normal = glm::vec3(attrib.normals[index.normal_index * 3 + 0],
                                        attrib.normals[index.normal_index * 3 + 1],
                                        attrib.normals[index.normal_index * 3 + 2]);
+                    normal = glm::normalize(normal);
                 } else {
                     *hasNorm = false;
                 }
@@ -176,11 +177,14 @@ void Trimesh::loadOBJ(const std::string &filename, bool *hasNorm, bool *hasUV) {
                 vertex.normal = normal;
                 vertex.uv = uv;
 
-                if (uniqueVertices.count(vertex) == 0) {
-                    uniqueVertices[vertex] = static_cast<uint32_t>(vertices.size());
-                    vertices.push_back(vertex);
-                }
-                indices.push_back(uniqueVertices[vertex]);
+                //if (uniqueVertices.count(vertex) == 0) {
+                //    uniqueVertices[vertex] = static_cast<uint32_t>(vertices.size());
+                //    vertices.push_back(vertex);
+                //}
+                //indices.push_back(uniqueVertices[vertex]);
+
+                vertices.push_back(vertex);
+                indices.push_back(vertices.size() - 1);
             }
         }
     }

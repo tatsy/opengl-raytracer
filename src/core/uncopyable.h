@@ -1,6 +1,8 @@
 #pragma once
 
-class Uncopyable {
+#include "api.h"
+
+class GLRT_API Uncopyable {
 public:
     Uncopyable() {}
     virtual ~Uncopyable() {}
