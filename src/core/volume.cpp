@@ -2,6 +2,7 @@
 #include "volume.h"
 
 #include <cstdio>
+#include <algorithm>
 #include <stdexcept>
 
 namespace glrt {
