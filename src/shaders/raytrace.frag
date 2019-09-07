@@ -1,45 +1,54 @@
 #version 410
-precision highp float;
-//#extension GL_ARB_gpu_shader_fp64 : enable
-//#define float double
-//#define vec2 dvec2
-//#define vec3 dvec3
-//#define vec4 dvec4
+#extension GL_ARB_gpu_shader_fp64 : enable
 
-in vec3 f_camPosWorldSpace;
-in vec3 f_posCamSpace;
+precision highp float;
 
 layout(location = 0) out vec4 out_color;
 layout(location = 1) out vec4 out_count;
 
+// ----------------------------------------------------------------------------
+// Uniform variables
+// ----------------------------------------------------------------------------
+
+// Camera parameters
+uniform mat4 u_c2wMat;
+uniform mat4 u_s2cMat;
+uniform float u_apertureRadius = 0.0;
+uniform float u_focalLength = 1000.0;
+
+// Rendering parameters
 uniform vec2 u_seed;
 uniform int u_maxDepth = 16;
 uniform int u_nSamples = 16;
-uniform vec2 u_windowSize;
-uniform mat4 u_mvMat;
 
+// Frame
+uniform vec2 u_windowSize;
 uniform sampler2D u_framebuffer;
 uniform sampler2D u_counter;
 
+// Scene
 uniform int u_nTris;
 uniform samplerBuffer u_vertBuffer;
 uniform samplerBuffer u_triBuffer;
 uniform samplerBuffer u_matBuffer;
+uniform samplerBuffer u_bvhBuffer;
 
+// Light source
 uniform int u_nLights;
 uniform samplerBuffer u_lightBuffer;
 
-uniform samplerBuffer u_bvhBuffer;
-
+// Volume
+uniform bool u_hasVolume = false;
 uniform float u_densityMax = 1.0;
 uniform vec3 u_bboxMin = vec3(0.0);
 uniform vec3 u_bboxMax = vec3(1.0);
 uniform sampler3D u_densityTex;
 uniform sampler3D u_temperatureTex;
 
+// Constant parameters
 const float PI = 3.14159265358979;
 const float INFTY = 1.0e7;
-const float EPS = 1.0e-4;
+const float EPS = 1.0e-3;
 
 // ----------------------------------------------------------------------------
 // Structs
@@ -88,22 +97,22 @@ Ray spawnRay(in vec3 org, in vec3 dir) {
     return Ray(org + dir * EPS, dir);
 }
 
-float bbr(float l, float T) {
-	float h = 6.6260e-34;
-	float c = 2.9979e8;
-	float k = 1.3806e-23;
+float blackBody(float l, float T) {
+	const float h = 6.6260e-34;
+	const float c = 2.9979e8;
+	const float k = 1.3806e-23;
 	float l5 = (l * l) * (l * l) * l;
-	return (2 * h * c * c) / (l5 * (exp((h * c) / (l * k  * T)) - 1));
+	return (2.0 * h * c * c) / (l5 * (exp((h * c) / (l * k  * T)) - 1));
 }
 
 vec3 blackBody(float T) {
-	float lambdaR = 6.10e-7;
-	float lambdaG = 5.50e-7;
-	float lambdaB = 4.50e-7;
+	const float lambdaR = 6.10e-7;
+	const float lambdaG = 5.50e-7;
+	const float lambdaB = 4.50e-7;
 
-    float R = max(0.0, bbr(lambdaR, T));
-    float G = max(0.0, bbr(lambdaG, T));
-    float B = max(0.0, bbr(lambdaB, T));
+    float R = max(0.0, blackBody(lambdaR, T));
+    float G = max(0.0, blackBody(lambdaG, T));
+    float B = max(0.0, blackBody(lambdaB, T));
 	return vec3(R, G, B);
 }
 
@@ -173,10 +182,10 @@ bool intersect(in Ray ray, out Intersection isect) {
 	isect.tHit = INFTY;
 	isect.norm = vec3(0.0);
 	isect.mtrl = 0;
-	bool hit = false;
 
+	bool hit = false;
 	int pos = 0;
-	int stack[128];
+	int stack[32];
 
 	stack[0] = 0;
 	while (pos >= 0) {
@@ -269,43 +278,6 @@ vec3 sampleDirect(in vec3 x, in vec3 n) {
 	return vec3(0.0);
 }
 
-vec3 sampleDirectVolume(in vec3 x) {
-    int lightID = min(int(rand() * u_nLights), u_nLights - 1);
-
-    vec2 u = vec2(rand(), rand());
-    if (u.x + u.y > 1.0) {
-        u.x = 1.0 - u.x;
-        u.y = 1.0 - u.y;
-    }
-
-    vec3 ijk = texelFetch(u_lightBuffer, lightID).xyz;
-
-    Triangle tri;
-    tri.v[0] = texelFetch(u_vertBuffer, int(ijk.x) * 5 + 0).xyz;
-    tri.v[1] = texelFetch(u_vertBuffer, int(ijk.y) * 5 + 0).xyz;
-    tri.v[2] = texelFetch(u_vertBuffer, int(ijk.z) * 5 + 0).xyz;
-
-    vec3 p = (1.0 - u.x - u.y) * tri.v[0] + u.x * tri.v[1] + u.y * tri.v[2];
-
-    vec3 dir = normalize(p - x);
-    Ray ray = spawnRay(x, dir);
-
-	Intersection isect;
-    bool isHit = intersect(ray, isect);
-
-    float dist = length(p - x);
-    if (isHit && abs(dist - isect.tHit) < EPS) {
-        int mtrlID = int(texelFetch(u_lightBuffer, lightID).w);
-        vec3 e = texelFetch(u_matBuffer, mtrlID * 3 + 0).xyz;
-        float dot1 = max(0.0, dot(-ray.d, isect.norm));
-        float G = dot1 / (dist * dist);
-        float area = 0.5 * length(cross(tri.v[1] - tri.v[0], tri.v[2] - tri.v[0]));
-        float pdf = 1.0 / (area * float(u_nLights));
-        return e * G / pdf / (4.0 * PI);
-    }
-    return vec3(0.0);
-}
-
 vec3 radiance(in Ray r){
     vec3 L = vec3(0.0);
     vec3 beta = vec3(1.0);
@@ -320,77 +292,74 @@ vec3 radiance(in Ray r){
 		vec3 e = texelFetch(u_matBuffer, isect.mtrl * 3 + 0).xyz;
         vec3 f = texelFetch(u_matBuffer, isect.mtrl * 3 + 1).xyz;
 
-		if (isBlack(e) && isBlack(f) && dot(-ray.d, isect.norm) >= EPS) {
-			// Volume (perform Woodcock tracking)
-            vec3 sigS = vec3(1.0, 1.0, 1.0) * 0.1;
-            vec3 sigA = vec3(0.1, 0.1, 0.1) * 0.6;
-            float sigT = sigS.x + sigA.x;
+        /*
+        if (u_hasVolume) {
+            if (isBlack(e) && isBlack(f) && dot(-ray.d, isect.norm) >= EPS) {
+                // Volume (perform Woodcock tracking)
+                vec3 sigS = vec3(1.0, 1.0, 1.0) * 0.1;
+                vec3 sigA = vec3(0.1, 0.1, 0.1) * 0.6;
+                float sigT = sigS.x + sigA.x;
 
-			int nTrial = 8;
-			vec3 nextOrg = x;
-			vec3 nextDir = ray.d;
-			for (int k = 0; k < nTrial; k++) {
-				Ray nextRay = spawnRay(nextOrg, nextDir);
-				Intersection inext;
-				bool hit = intersect(nextRay, inext);
-                if (!hit) {
-                    return vec3(1, 0, 1);
+                int nTrial = 8;
+                vec3 nextOrg = x;
+                vec3 nextDir = ray.d;
+                for (int k = 0; k < nTrial; k++) {
+                    Ray nextRay = spawnRay(nextOrg, nextDir);
+                    Intersection inext;
+                    bool hit = intersect(nextRay, inext);
+                    if (!hit) {
+                        return vec3(1, 0, 1);
+                    }
+
+                    float t = 0.0;
+                    bool pass = false;
+                    for (int i = 0; i < 256; i++) {
+                        t -= log(max(EPS, 1.0 - rand())) / (u_densityMax * sigT);
+                        if (t >= inext.tHit) {
+                            pass = true;
+                            break;
+                        }
+
+                        vec3 pos = nextOrg + t * nextDir;
+                        float density = densityLookup(pos);
+                        if (density / u_densityMax > rand()) {
+                            pass = true;
+                            break;
+                        }
+                    }
+
+                    if (!pass) {
+                        return vec3(0.0, 0.0, 0.0);
+                    }
+
+                    if (t >= inext.tHit) {
+                        nextOrg = nextOrg + (inext.tHit + EPS) * nextDir;
+                        break;
+                    }
+
+                    nextOrg = nextOrg + t * nextDir;
+
+                    // Black body radiation
+                    float T = temperatureLookup(nextOrg) * 100.0;
+                    L += beta * blackBody(T) / sigT;
+
+                    // Sample path direction
+                    float theta = acos(2.0 * rand() - 1.0);
+                    float phi = 2.0 * PI * rand();
+                    float cosTheta = cos(theta);
+                    float sinTheta = sin(theta);
+                    nextDir = vec3(sinTheta * cos(phi), sinTheta * sin(phi), cosTheta);
+
+                    // Scattering albedo
+                    beta *= sigS / sigT;
                 }
 
-				float t = 0.0;
-                bool pass = false;
-				for (int i = 0; i < 256; i++) {
-					t -= log(max(EPS, 1.0 - rand())) / (u_densityMax * sigT);
-					if (t >= inext.tHit) {
-                        pass = true;
-						break;
-					}
-
-					vec3 pos = nextOrg + t * nextDir;
-					float density = densityLookup(pos);
-					if (density / u_densityMax > rand()) {
-                        pass = true;
-						break;
-					}
-				}
-
-                if (!pass) {
-                    return vec3(0.0, 0.0, 0.0);
-                }
-
-				if (t >= inext.tHit) {
-                    nextOrg = nextOrg + (inext.tHit + EPS) * nextDir;
-                    break;
-				}
-
-				nextOrg = nextOrg + t * nextDir;
-
-                // Black body radiation
-				float T = temperatureLookup(nextOrg) * 100.0;
-				L += beta * blackBody(T) / sigT;
-
-				// Sample path direction
-				float theta = acos(2.0 * rand() - 1.0);
-				float phi = 2.0 * PI * rand();
-				float cosTheta = cos(theta);
-				float sinTheta = sin(theta);
-				nextDir = vec3(sinTheta * cos(phi), sinTheta * sin(phi), cosTheta);
-
-                // Scattering albedo
-				beta *= sigS / sigT;
-
-				// Russian roulette
-//				float p = min(0.95, max(beta.x, max(beta.y, beta.z)));
-//				if (rand() > p) {
-//					return min(L, 1.0e1);
-//				}
-//				beta /= p;
-			}
-
-            ray = spawnRay(nextOrg, nextDir);
-            passedVolume = true;
-			continue;
-		}
+                ray = spawnRay(nextOrg, nextDir);
+                passedVolume = true;
+                continue;
+            }
+        }
+        */
 
 		if (depth == 0 || passedVolume) {
 			if (isIntersect) {
@@ -424,7 +393,7 @@ vec3 radiance(in Ray r){
         beta *= f;
 
         // Russian roulette
-        if (depth > 3) {
+        if (depth > 2) {
 	        float p = min(0.95, max(beta.x, max(beta.y, beta.z)));
             if (rand() > p) {
 				break;
@@ -439,10 +408,37 @@ vec3 radiance(in Ray r){
 void main(void) {
     randState = gl_FragCoord.xy / u_windowSize;
 
-    Ray ray = Ray(
-        f_camPosWorldSpace,
-        normalize((inverse(u_mvMat) * vec4(f_posCamSpace, 0.0)).xyz)
-    );
+    // Camera space
+    vec2 pRand = vec2(rand(), rand());
+    vec3 pScreen = vec3(0.0);
+    pScreen.xy = (gl_FragCoord.xy + pRand) / u_windowSize;
+    pScreen.xy = pScreen.xy * 2.0 - 1.0;
+
+    vec4 temp;
+    temp = u_s2cMat * vec4(pScreen, 1.0);
+    vec3 pCamera = temp.xyz / temp.w;
+    vec3 org = vec3(0.0, 0.0, 0.0);
+    vec3 dir = normalize(pCamera);
+
+    // Sample on disk
+	if (u_apertureRadius > 0.0) {
+		float r = sqrt(rand()) * u_apertureRadius;
+		float theta = rand() * 2.0 * PI;
+		vec2 pLens = vec2(r * cos(theta), r * sin(theta));
+		float ft = -u_focalLength / dir.z;
+		vec3 pFocus = org + dir * ft;
+
+		org = vec3(pLens, 0.0);
+		dir = normalize(pFocus - org);
+	}
+
+    // World space
+    temp = u_c2wMat * vec4(org, 1.0);
+    vec3 orgWorld = temp.xyz / temp.w;
+    temp = u_c2wMat * vec4(dir, 0.0);
+    vec3 dirWorld = temp.xyz;
+
+    Ray ray = Ray(orgWorld, normalize(dirWorld));
 
 	vec2 uv = gl_FragCoord.xy / u_windowSize;
 	vec3 L = texture(u_framebuffer, uv).rgb;

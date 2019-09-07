@@ -62,6 +62,22 @@ void Scene::parse(const std::string &filename) {
     const std::string type = json["camera"]["type"].string_value();
     Info("Camera type: %s", type.c_str());
     if (type == "perspective") {
+        // Parameters
+        if (json["camera"]["fov"].is_null()) {
+            FatalError("perspective camera node does not have \"fov\" key!");
+        }
+        fov = json["camera"]["fov"].number_value();
+
+        if (json["camera"]["apertureRadius"].is_null()) {
+            apertureRadius = 0.0f;
+        }
+        apertureRadius = json["camera"]["apertureRadius"].number_value();
+
+        if (json["camera"]["focalLength"].is_null()) {
+            focalLength = 1.0f;
+        }
+        focalLength = json["camera"]["focalLength"].number_value();
+
         // Model matrix
         modelM = glm::mat4(1.0f);
 
@@ -97,13 +113,23 @@ void Scene::parse(const std::string &filename) {
         const std::string material = shapes[i]["material"].string_value();
         Material mtrl;
         if (material == "diffuse") {
-            mtrl.Kd = glm::vec3(shapes[i]["reflectance"][0].number_value(),
-                                shapes[i]["reflectance"][1].number_value(),
-                                shapes[i]["reflectance"][2].number_value());
+            if (shapes[i]["reflectance"].is_null()) {
+                Warn("diffuse node does not have \"reflectance\" key!");
+                mtrl.Kd = glm::vec3(0.5f, 0.5f, 0.5f);
+            } else {
+                mtrl.Kd = glm::vec3(shapes[i]["reflectance"][0].number_value(),
+                                    shapes[i]["reflectance"][1].number_value(),
+                                    shapes[i]["reflectance"][2].number_value());
+            }
         } else if (material == "emitter") {
-            mtrl.E = glm::vec3(shapes[i]["emission"][0].number_value(),
-                               shapes[i]["emission"][1].number_value(),
-                               shapes[i]["emission"][2].number_value());
+            if (shapes[i]["emission"].is_null()) {
+                Warn("emitter node does not have \"emission\" key!");
+                mtrl.E = glm::vec3(0.0f, 0.0f, 0.0f);
+            } else {
+                mtrl.E = glm::vec3(shapes[i]["emission"][0].number_value(),
+                                   shapes[i]["emission"][1].number_value(),
+                                   shapes[i]["emission"][2].number_value());
+            }
         } else if(material == "volume") {
             const int baseIndex = volumes.size();
             VolumeData voldata;

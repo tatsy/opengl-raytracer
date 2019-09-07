@@ -25,8 +25,9 @@ struct Material {
 
 struct VolumeData {
     glm::vec3 bboxMax, bboxMin;
-    float maxValue;
-    GLuint densityTex, temperatureTex;
+    float maxValue = 0.0f;
+    GLuint densityTex = 0u;
+    GLuint temperatureTex = 0u;
 };
 
 class GLRT_API Scene : private Uncopyable {
@@ -39,6 +40,7 @@ public:
 
 private:
     int width, height;
+    float fov, apertureRadius, focalLength;
     glm::mat4 modelM, viewM, projM;
 
     std::vector<Vertex> vertices;

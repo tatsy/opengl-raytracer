@@ -233,8 +233,11 @@ void Window::render() {
     static std::uniform_real_distribution<float> dist;
 
     const glm::mat4 camMat = scene->viewM * scene->modelM;
-    rtProgram->setMatrix4x4("u_mvMat", camMat);
-    rtProgram->setMatrix4x4("u_projMat", scene->projM);
+    const glm::mat4 projMat = scene->projM;
+    const glm::mat4 c2wMat = glm::inverse(camMat);
+    const glm::mat4 s2cMat = glm::inverse(projMat);
+    rtProgram->setMatrix4x4("u_c2wMat", c2wMat);
+    rtProgram->setMatrix4x4("u_s2cMat", s2cMat);
     rtProgram->setUniform2f("u_seed", glm::vec2(dist(mt), dist(mt)));
     rtProgram->setUniform1i("u_nSamples", 4);
     rtProgram->setUniform2f("u_windowSize", glm::vec2((float)width(), (float)height()));
@@ -270,6 +273,7 @@ void Window::render() {
 
     // Volume textures
     if (!scene->volumes.empty()) {
+        rtProgram->setUniform1i("u_hasVolume", 1);
         rtProgram->setUniform3f("u_bboxMin", scene->volumes[0].bboxMin);
         rtProgram->setUniform3f("u_bboxMax", scene->volumes[0].bboxMax);
         rtProgram->setUniform1f("u_densityMax", scene->volumes[0].maxValue);
@@ -281,6 +285,8 @@ void Window::render() {
         glActiveTexture(GL_TEXTURE8);
         glBindTexture(GL_TEXTURE_3D, scene->volumes[0].temperatureTex);
         rtProgram->setUniform1i("u_temperatureTex", 8);
+    } else {
+        rtProgram->setUniform1i("u_hasVolume", 0);
     }
 
     // Draw
