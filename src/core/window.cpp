@@ -103,9 +103,6 @@ Window::Window() {
 }
 
 void Window::mainloop(const std::shared_ptr<Scene> &scene, double fps) {
-    Timer killTimer;
-    killTimer.start();
-
     // Set scene and resize window
     this->scene = scene;
     resize(scene->width, scene->height);
@@ -164,13 +161,7 @@ void Window::mainloop(const std::shared_ptr<Scene> &scene, double fps) {
             glfwMakeContextCurrent(window_);
             glfwSwapBuffers(window_);
 
-            if (killTimer.count() > 50.0) {
-                saveCurrentFrame("output.png");
-            }
-
-            if (killTimer.count() > 60.0) {
-                glfwSetWindowShouldClose(window_, true);
-            }
+            saveCurrentFrame("output.png", true);
 
             // Reset timer
             duration = timer.count();
@@ -194,6 +185,10 @@ void Window::mainloop(const std::shared_ptr<Scene> &scene, double fps) {
 void Window::initialize() {
     glEnable(GL_DEPTH_TEST);
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+
+    GLint range[2], precision;
+    glGetShaderPrecisionFormat(GL_FRAGMENT_SHADER, GL_HIGH_FLOAT, range, &precision);
+    printf("Fragment: [%d %d] %d\n", range[0], range[1], precision);
 
     // VAO
     vao = std::make_shared<VertexArrayObject>();
@@ -238,8 +233,10 @@ void Window::render() {
     const glm::mat4 s2cMat = glm::inverse(projMat);
     rtProgram->setMatrix4x4("u_c2wMat", c2wMat);
     rtProgram->setMatrix4x4("u_s2cMat", s2cMat);
+    rtProgram->setUniform1f("u_apertureRadius", scene->apertureRadius);
+    rtProgram->setUniform1f("u_focalLength", scene->focalLength);
     rtProgram->setUniform2f("u_seed", glm::vec2(dist(mt), dist(mt)));
-    rtProgram->setUniform1i("u_nSamples", 4);
+    rtProgram->setUniform1i("u_nSamples", 1);
     rtProgram->setUniform2f("u_windowSize", glm::vec2((float)width(), (float)height()));
 
     rtProgram->setUniform1i("u_nTris", (int)scene->triangles.size());
@@ -383,7 +380,7 @@ void Window::resetBuffer() {
     fbo[0]->unbind();
 }
 
-void Window::saveCurrentFrame(const std::string &filename) const {
+void Window::saveCurrentFrame(const std::string &filename, bool overwrite) const {
     // Read pixels
     const int w = width();
     const int h = height();
@@ -405,7 +402,7 @@ void Window::saveCurrentFrame(const std::string &filename) const {
     std::string baseName = filePath.stem().string();
     std::string ext = filePath.extension().string();
     int count = 0;
-    while (fs::exists(filePath)) {
+    while (!overwrite && fs::exists(filePath)) {
         char temp[256];
         sprintf(temp, "%s_%d%s", baseName.c_str(), count++, ext.c_str());
         filePath = fs::path(temp);

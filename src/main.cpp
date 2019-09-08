@@ -10,6 +10,7 @@ int main(int argc, char **argv) {
     // Parse command line arguments
     ArgumentParser &parser = ArgumentParser::getInstance();
     parser.addArgument("-i", "--input", "", true, "Input XML file");
+    parser.addArgument("-s", "--sample-per-cycle", "4", false,"Samples per cycle");
     if (!parser.parse(argc, argv)) {
         std::cout << parser.helpText() << std::endl;
         return 1;

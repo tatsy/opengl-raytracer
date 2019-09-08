@@ -63,11 +63,6 @@ void Scene::parse(const std::string &filename) {
     Info("Camera type: %s", type.c_str());
     if (type == "perspective") {
         // Parameters
-        if (json["camera"]["fov"].is_null()) {
-            FatalError("perspective camera node does not have \"fov\" key!");
-        }
-        fov = json["camera"]["fov"].number_value();
-
         if (json["camera"]["apertureRadius"].is_null()) {
             apertureRadius = 0.0f;
         }
@@ -82,6 +77,10 @@ void Scene::parse(const std::string &filename) {
         modelM = glm::mat4(1.0f);
 
         // View matrix
+        if (json["camera"]["lookAt"].is_null()) {
+            FatalError("perspective camera node does not have \"lookAt\" key!");
+        }
+
         const glm::vec3 origin = glm::vec3(json["camera"]["lookAt"]["origin"][0].number_value(),
                                            json["camera"]["lookAt"]["origin"][1].number_value(),
                                            json["camera"]["lookAt"]["origin"][2].number_value());
@@ -94,10 +93,23 @@ void Scene::parse(const std::string &filename) {
         viewM = glm::lookAt(origin, target, up);
 
         // Projection matrix
-        const float fov = (float)json["camera"]["fov"].number_value();
+        if (json["camera"]["fov"].is_null()) {
+            FatalError("perspective camera node does not have \"fov\" key!");
+        }
+        const float fov = json["camera"]["fov"].number_value();
+
         const float aspect = (float)width / (float)height;
+
+        if (json["camera"]["nearClip"].is_null()) {
+            FatalError("perspective camera node does not have \"nearClip\" key!")
+        }
         const float zNear = (float)json["camera"]["nearClip"].number_value();
+
+        if (json["camera"]["farClip"].is_null()) {
+            FatalError("perspective camera node does not have \"farClip\" key!");
+        }
         const float zFar = (float)json["camera"]["farClip"].number_value();
+
         projM = glm::perspective(glm::radians(fov), aspect, zNear, zFar);
     }
 
@@ -113,24 +125,54 @@ void Scene::parse(const std::string &filename) {
         const std::string material = shapes[i]["material"].string_value();
         Material mtrl;
         if (material == "diffuse") {
+            mtrl.type = glm::vec3((float)MaterialType::Diffuse);
             if (shapes[i]["reflectance"].is_null()) {
                 Warn("diffuse node does not have \"reflectance\" key!");
-                mtrl.Kd = glm::vec3(0.5f, 0.5f, 0.5f);
+                mtrl.param0 = glm::vec3(0.5f, 0.5f, 0.5f);
             } else {
-                mtrl.Kd = glm::vec3(shapes[i]["reflectance"][0].number_value(),
-                                    shapes[i]["reflectance"][1].number_value(),
-                                    shapes[i]["reflectance"][2].number_value());
+                mtrl.param0 = glm::vec3(shapes[i]["reflectance"][0].number_value(),
+                                        shapes[i]["reflectance"][1].number_value(),
+                                        shapes[i]["reflectance"][2].number_value());
+            }
+        } else if (material == "conductor") {
+            mtrl.type = glm::vec3((float)MaterialType::Conductor);
+            if (shapes[i]["kappa"].is_null()) {
+                Warn("conductor node does not have \"kappa\" key!");
+                mtrl.param0 = glm::vec3(1.0f, 1.0f, 1.0f);
+            } else {
+                mtrl.param0 = glm::vec3(shapes[i]["kappa"][0].number_value(),
+                                        shapes[i]["kappa"][1].number_value(),
+                                        shapes[i]["kappa"][2].number_value());
+            }
+
+            if (shapes[i]["eta"].is_null()) {
+                Warn("conductor node does not have \"eta\" key!");
+                mtrl.param1 = glm::vec3(1.0f, 1.0f, 1.0f);
+            } else {
+                mtrl.param1 = glm::vec3(shapes[i]["eta"][0].number_value(),
+                                        shapes[i]["eta"][1].number_value(),
+                                        shapes[i]["eta"][2].number_value());
+            }
+
+            if (shapes[i]["alpha"].is_null()) {
+                Warn("conductor node does not have \"alpha\" key!");
+                mtrl.param2 = glm::vec3(0.0f, 0.0f, 0.0f);
+            } else {
+                const float a = shapes[i]["alpha"].number_value();
+                mtrl.param2 = glm::vec3(a, a, a);
             }
         } else if (material == "emitter") {
+            mtrl.type = glm::vec3((float)MaterialType::Emitter);
             if (shapes[i]["emission"].is_null()) {
                 Warn("emitter node does not have \"emission\" key!");
-                mtrl.E = glm::vec3(0.0f, 0.0f, 0.0f);
+                mtrl.emission = glm::vec3(0.0f, 0.0f, 0.0f);
             } else {
-                mtrl.E = glm::vec3(shapes[i]["emission"][0].number_value(),
-                                   shapes[i]["emission"][1].number_value(),
-                                   shapes[i]["emission"][2].number_value());
+                mtrl.emission = glm::vec3(shapes[i]["emission"][0].number_value(),
+                                          shapes[i]["emission"][1].number_value(),
+                                          shapes[i]["emission"][2].number_value());
             }
-        } else if(material == "volume") {
+        } else if(material == "media") {
+            mtrl.type = glm::vec3((float)MaterialType::Media);
             const int baseIndex = volumes.size();
             VolumeData voldata;
             {
@@ -170,7 +212,7 @@ void Scene::parse(const std::string &filename) {
                 voldata.temperatureTex = texId;
             }
             volumes.push_back(voldata);
-            mtrl.tex = glm::vec3(baseIndex, baseIndex + 1, 0.0);
+            mtrl.texIds = glm::vec3(baseIndex, baseIndex + 1, 0.0);
         } else {
             FatalError("Unsupported material: %s", material.c_str());
         }
@@ -201,7 +243,7 @@ void Scene::parse(const std::string &filename) {
                 indices.push_back(baseIndex + mesh.indices[i * 3 + 1]);
                 indices.push_back(baseIndex + mesh.indices[i * 3 + 2]);
 
-                if (glm::length(mtrl.E) != 0.0f) {
+                if (glm::length(mtrl.emission) != 0.0f) {
                     lights.push_back(tri);
                 }
             }
@@ -226,6 +268,7 @@ void Scene::parse(const std::string &filename) {
     lightTexBuffer = std::make_shared<TextureBuffer>(lights.size() * sizeof(Triangle), GL_RGBA32F, GL_STATIC_DRAW);
     lightTexBuffer->setData(lights.data());
 
+    // Check scene info
     Info("Scene setup OK!\n");
     Info("#vertex: %d", (int)vertices.size());
     Info("#triangle: %d", (int)triangles.size());

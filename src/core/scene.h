@@ -17,10 +17,21 @@ struct Triangle {
     glm::vec4 indices;  // i, j, k, mtrlID
 };
 
+enum class MaterialType : int {
+    Emitter = 0x01,
+    Diffuse = 0x02,
+    Conductor = 0x03,
+    Dielectric = 0x04,
+    Media = 0x05
+};
+
 struct Material {
-    glm::vec3 E = glm::vec3(0.0f);
-    glm::vec3 Kd = glm::vec3(0.0f);
-    glm::vec3 tex = glm::vec3(0.0f);
+    glm::vec3 type = glm::vec3(0.0f);
+    glm::vec3 emission = glm::vec3(0.0f);
+    glm::vec3 param0 = glm::vec3(0.0f);
+    glm::vec3 param1 = glm::vec3(0.0f);
+    glm::vec3 param2 = glm::vec3(0.0f);
+    glm::vec3 texIds = glm::vec3(0.0f);
 };
 
 struct VolumeData {
@@ -40,7 +51,7 @@ public:
 
 private:
     int width, height;
-    float fov, apertureRadius, focalLength;
+    float apertureRadius, focalLength;
     glm::mat4 modelM, viewM, projM;
 
     std::vector<Vertex> vertices;

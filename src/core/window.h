@@ -42,7 +42,7 @@ private:
     void cursorPosDefault(double xpos, double ypos);
 
     void resetBuffer();
-    void saveCurrentFrame(const std::string &filename) const;
+    void saveCurrentFrame(const std::string &filename, bool overwrite = true) const;
 
     GLFWwindow *window_;
     MouseEvent mouseEvent;
