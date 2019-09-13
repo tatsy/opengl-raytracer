@@ -1,10 +1,12 @@
-#version 410
-#extension GL_ARB_gpu_shader_fp64 : enable
+#version 450
+#extension GL_ARB_separate_shader_objects : enable
 
 precision highp float;
 
-uniform mat4 u_c2wMat;
-uniform mat4 u_s2cMat;
+layout(binding = 0) uniform UniformBufferObject {
+    uniform mat4 u_c2wMat;
+    uniform mat4 u_s2cMat;
+} ubo;
 
 vec2 positions[] = vec2[](
     vec2(-1.0, -1.0),
@@ -18,5 +20,5 @@ uint indices[] = uint[](
 );
 
 void main(void) {
-	gl_Position = vec4(positions[indices[gl_VertexID]], 0.0, 1.0);
+	gl_Position = vec4(positions[indices[gl_VertexIndex]], 0.0, 1.0);
 }

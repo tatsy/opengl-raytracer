@@ -1,25 +1,26 @@
-#version 410
+#version 450
+#extension GL_ARB_separate_shader_objects : require
+
 precision highp float;
 
-in vec3 f_camPosWorldSpace;
-in vec3 f_posCamSpace;
+layout(location = 0) out vec4 out_color;
 
-out vec4 out_color;
+layout(binding = 0) uniform UniformBufferObject {
+    float gamma;
+    vec2 windowSize;
+} ubo;
 
-uniform float u_gamma = 2.2;
-uniform vec2 u_windowSize;
-
-uniform sampler2D u_framebuffer;
-uniform sampler2D u_counter;
+layout(binding = 1) uniform sampler2D u_framebuffer;
+layout(binding = 2) uniform sampler2D u_counter;
 
 void main() {
-	vec2 uv = gl_FragCoord.xy / u_windowSize;
+	vec2 uv = gl_FragCoord.xy / ubo.windowSize;
 	vec3 rgb = texture(u_framebuffer, uv).rgb;
 	float count = texture(u_counter, uv).x;
 
 	vec3 L = rgb / count;
-    L.x = pow(clamp(L.x, 0.0, 1.0), 1.0 / u_gamma);
-    L.y = pow(clamp(L.y, 0.0, 1.0), 1.0 / u_gamma);
-    L.z = pow(clamp(L.z, 0.0, 1.0), 1.0 / u_gamma);
+    L.x = pow(clamp(L.x, 0.0, 1.0), 1.0 / ubo.gamma);
+    L.y = pow(clamp(L.y, 0.0, 1.0), 1.0 / ubo.gamma);
+    L.z = pow(clamp(L.z, 0.0, 1.0), 1.0 / ubo.gamma);
     out_color = vec4(L, 1.0);
 }

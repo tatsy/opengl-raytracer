@@ -16,7 +16,7 @@ find_package_handle_standard_args(
     GLM_INCLUDE_DIR
 )
 
-if (GLFW3_FOUND)
+if (GLM_FOUND)
     message(STATUS "GLM include: ${GLM_INCLUDE_DIR}")
-    set(GLM_INCLUDE_DIRS "${GLM_INCLUDE_DIR}")
+    set(GLM_INCLUDE_DIRS "${GLM_INCLUDE_DIR}" CACHE PATH "")
 endif()

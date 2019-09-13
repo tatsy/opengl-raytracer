@@ -1,5 +1,8 @@
 #version 410
-#extension GL_ARB_gpu_shader_fp64 : enable
+#extension GL_ARB_separate_shader_objects : require
+#extension GL_ARB_shading_language_420pack : require
+
+precision highp float;
 
 #define ENABLE_VOLUME 0
 
@@ -9,8 +12,8 @@
 #define Vec2 dvec2
 #define Vec3 dvec3
 #define Vec4 dvec4
-const Float INFTY = 1.0e8;
-const Float EPS = 1.0e-4;
+const Float INFTY = 1.0e12;
+const Float EPS = 1.0e-12;
 #else
 #define Float float
 #define Vec2 vec2
@@ -37,39 +40,55 @@ const int MTRL_MEDIA = 0x05;
 // ----------------------------------------------------------------------------
 
 // Camera parameters
-uniform mat4 u_c2wMat;
-uniform mat4 u_s2cMat;
-uniform float u_apertureRadius = 0.0;
-uniform float u_focalLength = 1.0;
+layout(binding = 0) uniform CameraUBO {
+    uniform mat4 c2wMat;
+    uniform mat4 s2cMat;
+    uniform float apertureRadius;
+    uniform float focalLength;
+} cameraUbo;
 
 // Rendering parameters
-uniform vec2 u_seed;
-uniform int u_maxDepth = 16;
-uniform int u_nSamples = 16;
+layout(binding = 1) uniform RenderUBO {
+    uniform vec2 seed;
+    uniform int maxDepth;
+    uniform int nSamples;
+} renderUbo;
 
 // Frame
-uniform vec2 u_windowSize;
-uniform sampler2D u_framebuffer;
-uniform sampler2D u_counter;
+layout(binding = 2) uniform FrameUBO {
+    uniform vec2 windowSize;
+} frameUbo;
+
+layout(binding = 10) uniform sampler2D u_framebuffer;
+layout(binding = 11) uniform sampler2D u_counter;
 
 // Scene
-uniform int u_nTris;
-uniform samplerBuffer u_vertBuffer;
-uniform samplerBuffer u_triBuffer;
-uniform samplerBuffer u_matBuffer;
-uniform samplerBuffer u_bvhBuffer;
+layout(binding = 3) uniform SceneUBO {
+    uniform int nTris;
+} sceneUbo;
+
+layout(binding = 12) uniform samplerBuffer u_vertBuffer;
+layout(binding = 13) uniform samplerBuffer u_triBuffer;
+layout(binding = 14) uniform samplerBuffer u_matBuffer;
+layout(binding = 15) uniform samplerBuffer u_bvhBuffer;
 
 // Light source
-uniform int u_nLights;
-uniform samplerBuffer u_lightBuffer;
+layout(binding = 4) uniform LightUBO {
+    uniform int nLights;
+} lightUbo;
+
+layout(binding = 16) uniform samplerBuffer u_lightBuffer;
 
 // Volume
-uniform bool u_hasVolume = false;
-uniform float u_densityMax = 1.0;
-uniform vec3 u_bboxMin = vec3(0.0);
-uniform vec3 u_bboxMax = vec3(1.0);
-uniform sampler3D u_densityTex;
-uniform sampler3D u_temperatureTex;
+layout(binding = 5) uniform VolumeUBO {
+    uniform bool hasVolume;
+    uniform float densityMax;
+    uniform vec3 bboxMin;
+    uniform vec3 bboxMax;
+} volumeUbo;
+
+layout(binding = 17) uniform sampler3D u_densityTex;
+layout(binding = 18) uniform sampler3D u_temperatureTex;
 
 // Constant parameters
 const Float PI = 3.1415926535897932384626433832795;
@@ -105,8 +124,8 @@ Float rand() {
     Float a = 12.9898;
     Float b = 78.233;
     Float c = 43758.5453;
-    randState.x = fract(sin(float(dot(randState.xy - u_seed, Vec2(a, b)))) * c);
-    randState.y = fract(sin(float(dot(randState.xy - u_seed, Vec2(a, b)))) * c);
+    randState.x = fract(sin(float(dot(randState.xy - renderUbo.seed, Vec2(a, b)))) * c);
+    randState.y = fract(sin(float(dot(randState.xy - renderUbo.seed, Vec2(a, b)))) * c);
     return randState.x;
 }
 
@@ -142,12 +161,12 @@ Vec3 blackBody(Float T) {
 }
 
 Float densityLookup(in Vec3 pos) {
-    Vec3 uvw = (pos - u_bboxMin) / (u_bboxMax - u_bboxMin);
+    Vec3 uvw = (pos - volumeUbo.bboxMin) / (volumeUbo.bboxMax - volumeUbo.bboxMin);
     return texture(u_densityTex, vec3(uvw)).x;
 }
 
 Float temperatureLookup(in Vec3 pos) {
-    Vec3 uvw = (pos - u_bboxMin) / (u_bboxMax - u_bboxMin);
+    Vec3 uvw = (pos - volumeUbo.bboxMin) / (volumeUbo.bboxMax - volumeUbo.bboxMin);
     return texture(u_temperatureTex, vec3(uvw)).x;
 }
 
@@ -336,7 +355,7 @@ bool intersect(in Ray ray, out Intersection isect) {
 
 Vec3 sampleDirect(in Vec3 x, in Intersection isect) {
     // Take sample vertex on an area light
-    int lightID = min(int(rand() * u_nLights), u_nLights - 1);
+    int lightID = min(int(rand() * lightUbo.nLights), lightUbo.nLights - 1);
     Vec3 ijk = texelFetch(u_lightBuffer, lightID).xyz;
 
     Triangle tri;
@@ -395,7 +414,7 @@ Vec3 sampleDirect(in Vec3 x, in Intersection isect) {
         if (dot0 > 0.0 && dot1 > 0.0) {
             Float G = (dot0 * dot1) / (dist * dist);
             Float area = 0.5 * length(cross(tri.v[1] - tri.v[0], tri.v[2] - tri.v[0]));
-            Float pdf = 1.0 / (area * Float(u_nLights));
+            Float pdf = 1.0 / (area * Float(lightUbo.nLights));
             return e * f * G / pdf;
         }
     }
@@ -413,7 +432,7 @@ Vec3 radiance(in Ray r){
     bool passedVolume = false;
     bool specularReflect = false;
 
-    for (int depth = 0; depth < u_maxDepth; depth++) {
+    for (int depth = 0; depth < renderUbo.maxDepth; depth++) {
         Intersection isect;
         bool isIntersect = intersect(ray, isect);
 
@@ -564,33 +583,33 @@ Vec3 radiance(in Ray r){
 
 void main(void) {
     // Initialize random number state
-    randState = gl_FragCoord.xy / u_windowSize;
+    randState = gl_FragCoord.xy / frameUbo.windowSize;
 
     // Framebuffer settings
-    Vec2 uv = gl_FragCoord.xy / u_windowSize;
+    Vec2 uv = gl_FragCoord.xy / frameUbo.windowSize;
     Vec3 L = texture(u_framebuffer, vec2(uv)).rgb;
     Float count = texture(u_counter, vec2(uv)).x;
 
     // Main loop
-    for (int i = 0; i < u_nSamples; i++) {
+    for (int i = 0; i < renderUbo.nSamples; i++) {
         // Camera space
         Vec2 pRand = Vec2(rand(), rand());
         Vec3 pScreen = Vec3(0.0);
-        pScreen.xy = (gl_FragCoord.xy + pRand) / u_windowSize;
+        pScreen.xy = (gl_FragCoord.xy + pRand) / frameUbo.windowSize;
         pScreen.xy = pScreen.xy * 2.0 - 1.0;
 
         Vec4 temp;
-        temp = u_s2cMat * Vec4(pScreen, 1.0);
+        temp = cameraUbo.s2cMat * Vec4(pScreen, 1.0);
         Vec3 pCamera = temp.xyz / temp.w;
         Vec3 org = Vec3(0.0, 0.0, 0.0);
         Vec3 dir = normalize(pCamera);
 
         // Sample on disk
-        if (u_apertureRadius > 0.0) {
-            Float r = sqrt(rand()) * u_apertureRadius;
+        if (cameraUbo.apertureRadius > 0.0) {
+            Float r = sqrt(rand()) * cameraUbo.apertureRadius;
             Float theta = rand() * 2.0 * PI;
             Vec2 pLens = Vec2(r * cos(float(theta)), r * sin(float(theta)));
-            Float ft = -u_focalLength / dir.z;
+            Float ft = -1.0 * cameraUbo.focalLength / dir.z;
             Vec3 pFocus = org + dir * ft;
 
             org = Vec3(pLens, 0.0);
@@ -598,9 +617,9 @@ void main(void) {
         }
 
         // World space
-        temp = u_c2wMat * Vec4(org, 1.0);
+        temp = cameraUbo.c2wMat * Vec4(org, 1.0);
         Vec3 orgWorld = temp.xyz / temp.w;
-        temp = u_c2wMat * Vec4(dir, 0.0);
+        temp = cameraUbo.c2wMat * Vec4(dir, 0.0);
         Vec3 dirWorld = temp.xyz;
 
         // Ray tracing

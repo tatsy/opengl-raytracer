@@ -4,6 +4,7 @@
 #include "core/window.h"
 #include "core/argparse.h"
 #include "core/scene.h"
+#include "vulkan/vkengine.h"
 using namespace glrt;
 
 int main(int argc, char **argv) {
@@ -19,6 +20,7 @@ int main(int argc, char **argv) {
     // Parameters
     const std::string filename = parser.getString("input");
 
+    /*
     // Initialize window
     auto window = std::make_unique<Window>();
 
@@ -28,4 +30,8 @@ int main(int argc, char **argv) {
 
     // Start rendering
     window->mainloop(scene);
+    */
+
+    VkEngine engine(512, 512);
+    engine.mainloop();
 }

@@ -7,6 +7,8 @@ if (UNIX AND NOT APPLE)
     set(LINUX TRUE)
 endif()
 
+option(WITH_VULKAN "Use Vulkan front end" OFF)
+
 # ----------
 # Common target names
 # ----------
@@ -19,6 +21,7 @@ set(GLRT_INCLUDE_DIR "${CMAKE_CURRENT_LIST_DIR}/src")
 # ----------
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 if (UNIX)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 -pthread")
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -g -O2")
@@ -40,6 +43,11 @@ endif()
 find_package(OpenGL REQUIRED)
 find_package(GLFW3 REQUIRED)
 find_package(GLM REQUIRED)
+
+if (WITH_VULKAN)
+    find_package(Vulkan REQUIRED)
+endif()
+
 if (WITH_OPENMP)
     find_package(OpenMP)
     if (OPENMP_FOUND)
